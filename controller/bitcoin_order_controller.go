@@ -4,7 +4,6 @@ import (
 	"bitcoinOrder/entity"
 	"bitcoinOrder/service"
 	"bitcoinOrder/service/dto"
-	"fmt"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )
@@ -67,7 +66,7 @@ func (b *BitcoinOrderController) AddBalance(c echo.Context) error {
 
 	balance.Id = id
 	balance.Asset = asset
-	fmt.Println("amount: ", balance.Amount, "asset: ", balance.Asset, "Id: ", balance.Id)
+
 	if err := b.bitcoinOrderService.AddBalance(*balance); err != nil {
 		return c.JSON(http.StatusBadRequest, "Bad Request")
 	}
