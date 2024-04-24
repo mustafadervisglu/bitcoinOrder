@@ -1,0 +1,6 @@
+all: true
+outpkg: mocks
+output: ./repository/mocks
+dir: ./repository
+with-expecter: true
+recursive: true
