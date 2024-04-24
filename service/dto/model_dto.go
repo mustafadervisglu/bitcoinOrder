@@ -18,3 +18,9 @@ type OrderMatchDto struct {
 	OrderID1 uuid.UUID
 	OrderID2 uuid.UUID
 }
+
+type BalanceDto struct {
+	Id     string
+	Asset  string
+	Amount float64
+}

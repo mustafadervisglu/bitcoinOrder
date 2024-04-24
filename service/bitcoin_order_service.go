@@ -8,7 +8,7 @@ import (
 
 type IBitcoinOrderService interface {
 	CreateUser(user dto.UserDto) error
-	AddBalance(id string, asset string, amount float64) error
+	AddBalance(balanceDto dto.BalanceDto) error
 	GetBalance(userID string) (dto.UserDto, error)
 	FindAllOrder() ([]dto.OrderDto, error)
 	FindUserByID(id string) (dto.UserDto, error)
@@ -37,9 +37,12 @@ func (b *BitcoinOrderService) CreateUser(userDto dto.UserDto) error {
 	return nil
 }
 
-func (b *BitcoinOrderService) AddBalance(id string, asset string, amount float64) error {
-	//TODO implement me
-	panic("implement me")
+func (b *BitcoinOrderService) AddBalance(balanceDto dto.BalanceDto) error {
+	err := b.bitcoinOrderRepository.AddBalance(balanceDto.Id, balanceDto.Asset, balanceDto.Amount)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b *BitcoinOrderService) GetBalance(userID string) (dto.UserDto, error) {

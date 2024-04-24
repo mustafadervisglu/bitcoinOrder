@@ -4,6 +4,7 @@ import (
 	"bitcoinOrder/entity"
 	"bitcoinOrder/service"
 	"bitcoinOrder/service/dto"
+	"fmt"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )
@@ -16,7 +17,9 @@ func NewBitcoinOrderController(bitcoinOrderService service.IBitcoinOrderService)
 	return &BitcoinOrderController{bitcoinOrderService: bitcoinOrderService}
 }
 func (b *BitcoinOrderController) RegisterRoutes(e *echo.Echo) {
+
 	e.POST("/api/v1/user", b.CreateUser)
+	e.POST("/api/v1/user/addBalance/:id/:asset", b.AddBalance)
 	e.GET("/api/v1/user/:id", b.FindUserByID)
 
 }
@@ -51,4 +54,22 @@ func (b *BitcoinOrderController) FindUserByID(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Bad Request")
 	}
 	return c.JSON(http.StatusOK, user)
+}
+
+func (b *BitcoinOrderController) AddBalance(c echo.Context) error {
+	id := c.Param("id")
+	asset := c.Param("asset")
+
+	balance := new(dto.BalanceDto)
+	if err := c.Bind(balance); err != nil {
+		return c.JSON(http.StatusBadRequest, "Bad Request")
+	}
+
+	balance.Id = id
+	balance.Asset = asset
+	fmt.Println("amount: ", balance.Amount, "asset: ", balance.Asset, "Id: ", balance.Id)
+	if err := b.bitcoinOrderService.AddBalance(*balance); err != nil {
+		return c.JSON(http.StatusBadRequest, "Bad Request")
+	}
+	return c.JSON(http.StatusOK, "Balance added successfully")
 }

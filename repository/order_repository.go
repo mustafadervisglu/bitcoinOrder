@@ -44,7 +44,7 @@ func (o *OrderRepository) AddBalance(id string, asset string, amount float64) er
 	}
 	if asset == "BTC" {
 		*user.BtcBalance += amount
-	} else if asset == "USD" {
+	} else if asset == "USDT" {
 		*user.UsdBalance += amount
 	}
 	err2 := o.gormDB.Save(&user).Error
