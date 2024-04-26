@@ -19,7 +19,7 @@ func (b *BitcoinOrderController) RegisterRoutes(e *echo.Echo) {
 
 	e.POST("/api/v1/user", b.CreateUser)
 	e.POST("/api/v1/user/addBalance/:id/:asset", b.AddBalance)
-	e.GET("/api/v1/user/:id", b.FindUserByID)
+	e.GET("/api/v1/user/:id", b.GetBalance)
 
 }
 
@@ -46,9 +46,9 @@ func (b *BitcoinOrderController) CreateUser(c echo.Context) error {
 	return c.JSON(http.StatusOK, "User created successfully")
 }
 
-func (b *BitcoinOrderController) FindUserByID(c echo.Context) error {
+func (b *BitcoinOrderController) GetBalance(c echo.Context) error {
 	id := c.Param("id")
-	user, err := b.bitcoinOrderService.FindUserByID(id)
+	user, err := b.bitcoinOrderService.GetBalance(id)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Bad Request")
 	}

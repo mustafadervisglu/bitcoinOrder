@@ -8,8 +8,9 @@ import (
 
 type OrderMatch struct {
 	gorm.Model
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
-	OrderID1  uuid.UUID `gorm:"type:uuid;not null"`
-	OrderID2  uuid.UUID `gorm:"type:uuid;not null"`
-	MatchedAt time.Time `gorm:"default:current_timestamp"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
+	OrderID1      uuid.UUID `gorm:"type:uuid;not null"`
+	OrderID2      uuid.UUID `gorm:"type:uuid;not null"`
+	OrderQuantity float64   `gorm:"type:double precision"`
+	MatchedAt     time.Time `gorm:"default:current_timestamp"`
 }

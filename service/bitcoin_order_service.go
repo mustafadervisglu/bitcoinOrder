@@ -9,12 +9,10 @@ import (
 type IBitcoinOrderService interface {
 	CreateUser(user dto.UserDto) error
 	AddBalance(balanceDto dto.BalanceDto) error
-	GetBalance(userID string) (dto.UserDto, error)
 	FindAllOrder() ([]dto.OrderDto, error)
-	FindUserByID(id string) (dto.UserDto, error)
-	SaveOrder(order dto.OrderDto) error
-	UpdateOrder(order dto.OrderDto) error
-	Delete(id string) error
+	GetBalance(id string) (dto.UserDto, error)
+	Order(order dto.OrderDto) error
+	DeleteOrder(id string) error
 }
 
 type BitcoinOrderService struct {
@@ -45,18 +43,13 @@ func (b *BitcoinOrderService) AddBalance(balanceDto dto.BalanceDto) error {
 	return nil
 }
 
-func (b *BitcoinOrderService) GetBalance(userID string) (dto.UserDto, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (b *BitcoinOrderService) FindAllOrder() ([]dto.OrderDto, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (b *BitcoinOrderService) FindUserByID(id string) (dto.UserDto, error) {
-	res, err := b.bitcoinOrderRepository.FindUserByID(id)
+func (b *BitcoinOrderService) GetBalance(id string) (dto.UserDto, error) {
+	res, err := b.bitcoinOrderRepository.GetBalance(id)
 	if err != nil {
 		return dto.UserDto{}, err
 	}
@@ -68,17 +61,12 @@ func (b *BitcoinOrderService) FindUserByID(id string) (dto.UserDto, error) {
 	return user, nil
 }
 
-func (b *BitcoinOrderService) SaveOrder(order dto.OrderDto) error {
+func (b *BitcoinOrderService) Order(order dto.OrderDto) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (b *BitcoinOrderService) UpdateOrder(order dto.OrderDto) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (b *BitcoinOrderService) Delete(id string) error {
+func (b *BitcoinOrderService) DeleteOrder(id string) error {
 	//TODO implement me
 	panic("implement me")
 }

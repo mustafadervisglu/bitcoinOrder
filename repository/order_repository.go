@@ -5,17 +5,17 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"time"
 )
 
 type IOrderRepository interface {
 	CreateUser(user entity.Users) (entity.Users, error)
 	AddBalance(id string, asset string, amount float64) error
-	GetBalance(userID string) (entity.Users, error)
-	FindAllOrder() ([]entity.Order, error)
-	FindUserByID(id string) (entity.Users, error)
-	SaveOrder(order entity.Order) (entity.Order, error)
-	UpdateOrder(order entity.Order) (entity.Order, error)
-	Delete(id string) (entity.Order, error)
+	FindAllOrder() []entity.Order
+	GetBalance(id string) (entity.Users, error)
+	CreateOrder(newOrder entity.Order) (entity.Order, error)
+	DeleteOrder(id string) (entity.Order, error)
+	CheckOrder() ([]entity.OrderMatch, error)
 }
 
 type OrderRepository struct {
@@ -38,7 +38,7 @@ func (o *OrderRepository) CreateUser(user entity.Users) (entity.Users, error) {
 }
 
 func (o *OrderRepository) AddBalance(id string, asset string, amount float64) error {
-	user, err := o.FindUserByID(id)
+	user, err := o.GetBalance(id)
 	if err != nil {
 		return err
 	}
@@ -54,17 +54,13 @@ func (o *OrderRepository) AddBalance(id string, asset string, amount float64) er
 	return nil
 }
 
-func (o *OrderRepository) GetBalance(userID string) (entity.Users, error) {
-	//TODO implement me
-	panic("implement me")
+func (o *OrderRepository) FindAllOrder() []entity.Order {
+	var orders []entity.Order
+	o.gormDB.Find(&orders)
+	return orders
 }
 
-func (o *OrderRepository) FindAllOrder() ([]entity.Order, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (o *OrderRepository) FindUserByID(id string) (entity.Users, error) {
+func (o *OrderRepository) GetBalance(id string) (entity.Users, error) {
 	var user entity.Users
 	uuidID, err := uuid.Parse(id)
 	if err != nil {
@@ -78,19 +74,75 @@ func (o *OrderRepository) FindUserByID(id string) (entity.Users, error) {
 	return user, nil
 }
 
-func (o *OrderRepository) SaveOrder(order entity.Order) (entity.Order, error) {
+func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, error) {
+
+	if newOrder.OrderPrice <= 0 && newOrder.OrderQuantity <= 0 {
+		return entity.Order{}, errors.New("invalid order price")
+	}
+	if err := o.gormDB.Create(&newOrder).Error; err != nil {
+		return entity.Order{}, err
+	}
+
+	return newOrder, nil
+}
+
+func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (o *OrderRepository) UpdateOrder(order entity.Order) (entity.Order, error) {
-	//TODO implement me
-	panic("implement me")
-}
+func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
+	var buyOrders, sellOrders []entity.Order
+	var orderMatches []entity.OrderMatch
+	if err := o.gormDB.Where("order_status = ?", true).Order("order_price ASC,created_at ASC").Find(&buyOrders, "type = ?", "buy").Error; err != nil {
+		return orderMatches, err
+	}
+	if err := o.gormDB.Where("order_status = ?", true).Order("order_price DESC,created_at ASC").Find(&sellOrders, "type = ?", "sell").Error; err != nil {
+		return orderMatches, err
+	}
 
-func (o *OrderRepository) Delete(id string) (entity.Order, error) {
-	//TODO implement me
-	panic("implement me")
+	for i := 0; i < len(buyOrders); i++ {
+		for j := 0; j < len(sellOrders); j++ {
+			buyOrder := buyOrders[i]
+			sellOrder := sellOrders[j]
+			if buyOrder.OrderPrice == sellOrder.OrderPrice {
+				matchQuantity := minQuantity(buyOrder.OrderQuantity, sellOrder.OrderQuantity)
+
+				orderMatch := entity.OrderMatch{
+					OrderID1:      buyOrder.ID,
+					OrderID2:      sellOrder.ID,
+					OrderQuantity: matchQuantity,
+					MatchedAt:     time.Now(),
+				}
+
+				if err := o.gormDB.Create(&orderMatch).Error; err != nil {
+					return nil, err
+				}
+				orderMatches = append(orderMatches, orderMatch)
+
+				buyOrder.OrderQuantity -= matchQuantity
+				sellOrder.OrderQuantity -= matchQuantity
+
+				o.gormDB.Save(&buyOrder)
+				o.gormDB.Save(&sellOrder)
+
+				if buyOrder.OrderQuantity == 0 || sellOrder.OrderQuantity == 0 {
+					break
+				}
+			}
+		}
+	}
+	if len(orderMatches) > 0 {
+		//update balance
+	}
+
+	return orderMatches, nil
+}
+func minQuantity(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // for testing purposes

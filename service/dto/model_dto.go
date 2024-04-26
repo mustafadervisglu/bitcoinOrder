@@ -9,9 +9,9 @@ type OrderDto struct {
 	OrderStatus   bool
 }
 type UserDto struct {
-	Email      string
-	BtcBalance float64
-	UsdBalance float64
+	Email      string  `json:"Email"`
+	BtcBalance float64 `json:"BtcBalance"`
+	UsdBalance float64 `json:"UsdBalance"`
 }
 
 type OrderMatchDto struct {
@@ -20,7 +20,7 @@ type OrderMatchDto struct {
 }
 
 type BalanceDto struct {
-	Id     string
-	Asset  string
-	Amount float64
+	Id     string  `param:"Id"`
+	Asset  string  `param:"Asset"`
+	Amount float64 `json:"Amount"`
 }

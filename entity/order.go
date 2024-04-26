@@ -12,7 +12,7 @@ type Order struct {
 	Asset         string    `gorm:"type:varchar(255)"`
 	OrderPrice    float64   `gorm:"type:double precision"`
 	OrderQuantity float64   `gorm:"type:double precision"`
-	OrderStatus   bool      `gorm:"type:boolean"`
+	OrderStatus   bool      `gorm:"type:boolean;default:true"`
 	CreatedAt     time.Time
 	CompletedAt   *time.Time `gorm:"default:null"`
 	Users         []Users    `gorm:"many2many:user_orders;"`
