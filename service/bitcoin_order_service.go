@@ -74,13 +74,28 @@ func (b *BitcoinOrderService) GetBalance(id string) (dto.UserDto, error) {
 }
 
 func (b *BitcoinOrderService) CreateOrder(order dto.OrderDto) error {
-	//TODO implement me
-	panic("implement me")
+	orderEntity := entity.Order{
+		Asset:         order.Asset,
+		OrderPrice:    order.OrderPrice,
+		OrderQuantity: order.OrderQuantity,
+		OrderStatus:   order.OrderStatus,
+		UserID:        order.UserID,
+		Type:          order.Type,
+	}
+
+	_, err := b.bitcoinOrderRepository.CreateOrder(orderEntity)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b *BitcoinOrderService) DeleteOrder(id string) error {
-	//TODO implement me
-	panic("implement me")
+	_, err := b.bitcoinOrderRepository.DeleteOrder(id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewBitcoinOrderService(bitcoinOrderRepository repository.IOrderRepository) IBitcoinOrderService {

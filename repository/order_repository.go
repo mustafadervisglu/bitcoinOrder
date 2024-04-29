@@ -165,6 +165,17 @@ func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
 				buyOrder.OrderQuantity -= matchQuantity
 				sellOrder.OrderQuantity -= matchQuantity
 
+				if buyOrder.OrderQuantity == 0 {
+					buyOrder.OrderStatus = false
+					now := time.Now()
+					buyOrder.CompletedAt = &now
+				}
+				if sellOrder.OrderQuantity == 0 {
+					sellOrder.OrderStatus = false
+					now := time.Now()
+					sellOrder.CompletedAt = &now
+				}
+
 				o.gormDB.Save(&buyOrder)
 				o.gormDB.Save(&sellOrder)
 

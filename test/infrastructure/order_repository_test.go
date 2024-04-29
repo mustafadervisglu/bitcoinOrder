@@ -67,7 +67,7 @@ func TestFindUserById(t *testing.T) {
 	assert.NotEqual(t, uuid.Nil, createdUser.ID, "Expected user ID to be set")
 
 	t.Run("Find User By Valid ID", func(t *testing.T) {
-		foundUser, err := orderRepository.FindUserByID(createdUser.ID.String())
+		foundUser, err := orderRepository.GetBalance(createdUser.ID.String())
 		assert.NoError(t, err, "Should find user without error")
 		assert.Equal(t, createdUser.ID, foundUser.ID, "The IDs should match")
 		assert.Equal(t, createdUser.Email, foundUser.Email, "The emails should match")
@@ -75,7 +75,7 @@ func TestFindUserById(t *testing.T) {
 
 	t.Run("User Not Found", func(t *testing.T) {
 		nonExistentID := uuid.New().String()
-		_, err := orderRepository.FindUserByID(nonExistentID)
+		_, err := orderRepository.GetBalance(nonExistentID)
 		assert.Error(t, err, "Should not find user")
 	})
 
