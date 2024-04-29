@@ -16,6 +16,7 @@ type IOrderRepository interface {
 	CreateOrder(newOrder entity.Order) (entity.Order, error)
 	DeleteOrder(id string) (entity.Order, error)
 	CheckOrder() ([]entity.OrderMatch, error)
+	UpdateBalance(orderMatches []entity.OrderMatch) error
 }
 
 type OrderRepository struct {
@@ -159,6 +160,40 @@ func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
 	}
 
 	return orderMatches, nil
+}
+
+func (o *OrderRepository) UpdateBalance(orderMatches []entity.OrderMatch) error {
+	for _, match := range orderMatches {
+		var buyOrder, sellOrder entity.Order
+		if err := o.gormDB.First(&buyOrder, "id = ?", match.OrderID1).Error; err != nil {
+			return err
+		}
+		if err := o.gormDB.First(&sellOrder, "id = ?", match.OrderID2).Error; err != nil {
+			return err
+		}
+
+		buyUser, err := o.GetBalance(buyOrder.UserID.String())
+		if err != nil {
+			return err
+		}
+		sellUser, err := o.GetBalance(sellOrder.UserID.String())
+		if err != nil {
+			return err
+		}
+
+		*buyUser.UsdBalance -= buyOrder.OrderPrice * match.OrderQuantity
+		*buyUser.BtcBalance += match.OrderQuantity
+		*sellUser.UsdBalance += sellOrder.OrderPrice * match.OrderQuantity
+		*sellUser.BtcBalance -= match.OrderQuantity
+
+		if err := o.gormDB.Save(&buyUser).Error; err != nil {
+			return err
+		}
+		if err := o.gormDB.Save(&sellUser).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func minQuantity(a, b float64) float64 {
 	if a < b {
