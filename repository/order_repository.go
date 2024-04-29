@@ -91,9 +91,14 @@ func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, erro
 		}
 		return entity.Order{}, err
 	}
-
-	if *user.UsdBalance < (newOrder.OrderQuantity * newOrder.OrderPrice) {
-		return entity.Order{}, errors.New("insufficient USD balance")
+	if newOrder.Type == "buy" {
+		if *user.UsdBalance < (newOrder.OrderQuantity * newOrder.OrderPrice) {
+			return entity.Order{}, errors.New("insufficient USD balance")
+		}
+	} else {
+		if newOrder.OrderQuantity > *user.BtcBalance {
+			return entity.Order{}, errors.New("insufficient BTC balance")
+		}
 	}
 
 	if err := o.gormDB.Create(&newOrder).Error; err != nil {
