@@ -110,8 +110,22 @@ func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, erro
 }
 
 func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
-	//TODO implement me
-	panic("implement me")
+	var order entity.Order
+	uuidID, err := uuid.Parse(id)
+	if err != nil {
+		return entity.Order{}, err
+	}
+	result := o.gormDB.First(&order, "id = ?", uuidID)
+
+	if result.Error != nil {
+		return entity.Order{}, result.Error
+	}
+
+	if err := o.gormDB.Delete(&order).Error; err != nil {
+		return entity.Order{}, err
+	}
+
+	return order, nil
 }
 
 func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
