@@ -79,6 +79,23 @@ func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, erro
 	if newOrder.OrderPrice <= 0 && newOrder.OrderQuantity <= 0 {
 		return entity.Order{}, errors.New("invalid order price")
 	}
+
+	if err := ValidateOrderType(OrderType(newOrder.Type)); err != nil {
+		return entity.Order{}, err
+	}
+
+	var user entity.Users
+	if err := o.gormDB.First(&user, "id = ?", newOrder.UserID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.Order{}, errors.New("user not found")
+		}
+		return entity.Order{}, err
+	}
+
+	if *user.UsdBalance < (newOrder.OrderQuantity * newOrder.OrderPrice) {
+		return entity.Order{}, errors.New("insufficient USD balance")
+	}
+
 	if err := o.gormDB.Create(&newOrder).Error; err != nil {
 		return entity.Order{}, err
 	}
@@ -94,10 +111,10 @@ func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
 func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
 	var buyOrders, sellOrders []entity.Order
 	var orderMatches []entity.OrderMatch
-	if err := o.gormDB.Where("order_status = ?", true).Order("order_price ASC,created_at ASC").Find(&buyOrders, "type = ?", "buy").Error; err != nil {
+	if err := o.gormDB.Where("order_status = ? AND type = ?", true, "buy").Order("order_price ASC, created_at ASC").Find(&buyOrders).Error; err != nil {
 		return orderMatches, err
 	}
-	if err := o.gormDB.Where("order_status = ?", true).Order("order_price DESC,created_at ASC").Find(&sellOrders, "type = ?", "sell").Error; err != nil {
+	if err := o.gormDB.Where("order_status = ? AND type = ?", true, "sell").Order("order_price DESC, created_at ASC").Find(&sellOrders).Error; err != nil {
 		return orderMatches, err
 	}
 

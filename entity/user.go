@@ -11,5 +11,5 @@ type Users struct {
 	Email      string    `gorm:"type:varchar(255);unique;not null"`
 	BtcBalance *float64  `gorm:"type:double precision"`
 	UsdBalance *float64  `gorm:"type:double precision"`
-	Orders     []Order   `gorm:"many2many:user_orders;"`
+	Orders     []Order   `gorm:"foreignKey:UserID"`
 }
