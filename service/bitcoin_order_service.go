@@ -11,7 +11,7 @@ type IBitcoinOrderService interface {
 	AddBalance(balanceDto dto.BalanceDto) error
 	FindAllOrder() ([]dto.OrderDto, error)
 	GetBalance(id string) (dto.UserDto, error)
-	Order(order dto.OrderDto) error
+	CreateOrder(order dto.OrderDto) error
 	DeleteOrder(id string) error
 }
 
@@ -44,8 +44,20 @@ func (b *BitcoinOrderService) AddBalance(balanceDto dto.BalanceDto) error {
 }
 
 func (b *BitcoinOrderService) FindAllOrder() ([]dto.OrderDto, error) {
-	//TODO implement me
-	panic("implement me")
+	orders := b.bitcoinOrderRepository.FindAllOrder()
+	var orderDtos []dto.OrderDto
+	for _, order := range orders {
+		orderDto := dto.OrderDto{
+			Asset:         order.Asset,
+			OrderPrice:    order.OrderPrice,
+			OrderQuantity: order.OrderQuantity,
+			OrderStatus:   order.OrderStatus,
+			UserID:        order.UserID,
+			Type:          order.Type,
+		}
+		orderDtos = append(orderDtos, orderDto)
+	}
+	return orderDtos, nil
 }
 
 func (b *BitcoinOrderService) GetBalance(id string) (dto.UserDto, error) {
@@ -61,7 +73,7 @@ func (b *BitcoinOrderService) GetBalance(id string) (dto.UserDto, error) {
 	return user, nil
 }
 
-func (b *BitcoinOrderService) Order(order dto.OrderDto) error {
+func (b *BitcoinOrderService) CreateOrder(order dto.OrderDto) error {
 	//TODO implement me
 	panic("implement me")
 }

@@ -3,10 +3,12 @@ package dto
 import "github.com/google/uuid"
 
 type OrderDto struct {
-	Asset         string
-	OrderPrice    float64
-	OrderQuantity float64
-	OrderStatus   bool
+	Asset         string    `json:"Asset"`
+	OrderPrice    float64   `json:"OrderPrice"`
+	OrderQuantity float64   `json:"OrderQuantity"`
+	OrderStatus   bool      `json:"OrderStatus"`
+	UserID        uuid.UUID `json:"UserID"`
+	Type          string    `json:"Type"`
 }
 type UserDto struct {
 	Email      string  `json:"Email"`

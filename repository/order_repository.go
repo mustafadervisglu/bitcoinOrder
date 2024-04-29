@@ -129,13 +129,18 @@ func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
 }
 
 func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
-	var buyOrders, sellOrders []entity.Order
+
+	if o.gormDB == nil {
+		return nil, errors.New("nil db connection")
+	}
+
 	var orderMatches []entity.OrderMatch
+	var buyOrders, sellOrders []entity.Order
 	if err := o.gormDB.Where("order_status = ? AND type = ?", true, "buy").Order("order_price ASC, created_at ASC").Find(&buyOrders).Error; err != nil {
-		return orderMatches, err
+		return nil, err
 	}
 	if err := o.gormDB.Where("order_status = ? AND type = ?", true, "sell").Order("order_price DESC, created_at ASC").Find(&sellOrders).Error; err != nil {
-		return orderMatches, err
+		return nil, err
 	}
 
 	for i := 0; i < len(buyOrders); i++ {
@@ -170,7 +175,9 @@ func (o *OrderRepository) CheckOrder() ([]entity.OrderMatch, error) {
 		}
 	}
 	if len(orderMatches) > 0 {
-		//update balance
+		if err := o.UpdateBalance(orderMatches); err != nil {
+			return nil, err
+		}
 	}
 
 	return orderMatches, nil

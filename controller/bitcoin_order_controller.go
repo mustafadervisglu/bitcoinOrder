@@ -20,6 +20,7 @@ func (b *BitcoinOrderController) RegisterRoutes(e *echo.Echo) {
 	e.POST("/api/v1/user", b.CreateUser)
 	e.POST("/api/v1/user/addBalance/:id/:asset", b.AddBalance)
 	e.GET("/api/v1/user/:id", b.GetBalance)
+	e.GET("/api/v1/allOrder", b.FindAllOrder)
 
 }
 
@@ -71,4 +72,9 @@ func (b *BitcoinOrderController) AddBalance(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Bad Request")
 	}
 	return c.JSON(http.StatusOK, "Balance added successfully")
+}
+
+func (b *BitcoinOrderController) FindAllOrder(c echo.Context) error {
+	orders, _ := b.bitcoinOrderService.FindAllOrder()
+	return c.JSON(http.StatusOK, orders)
 }
