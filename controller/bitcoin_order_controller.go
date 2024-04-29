@@ -28,7 +28,7 @@ func (b *BitcoinOrderController) RegisterRoutes(e *echo.Echo) {
 func (b *BitcoinOrderController) CreateUser(c echo.Context) error {
 	user := new(entity.Users)
 	if err := c.Bind(user); err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 	userDto := dto.UserDto{
 		Email:      user.Email,
@@ -43,7 +43,7 @@ func (b *BitcoinOrderController) CreateUser(c echo.Context) error {
 	}
 	err2 := b.bitcoinOrderService.CreateUser(userDto)
 	if err2 != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err2.Error())
 	}
 	return c.JSON(http.StatusOK, "User created successfully")
 }
@@ -52,7 +52,7 @@ func (b *BitcoinOrderController) GetBalance(c echo.Context) error {
 	id := c.Param("id")
 	user, err := b.bitcoinOrderService.GetBalance(id)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, user)
 }
@@ -63,14 +63,14 @@ func (b *BitcoinOrderController) AddBalance(c echo.Context) error {
 
 	balance := new(dto.BalanceDto)
 	if err := c.Bind(balance); err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 
 	balance.Id = id
 	balance.Asset = asset
 
 	if err := b.bitcoinOrderService.AddBalance(*balance); err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, "Balance added successfully")
 }
@@ -83,11 +83,11 @@ func (b *BitcoinOrderController) FindAllOrder(c echo.Context) error {
 func (b *BitcoinOrderController) CreateOrder(c echo.Context) error {
 	order := new(dto.OrderDto)
 	if err := c.Bind(order); err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 	err := b.bitcoinOrderService.CreateOrder(*order)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Bad Request")
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, "Order created successfully")
 }
