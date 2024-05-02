@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bitcoinOrder/config/postgresql"
 	"bitcoinOrder/controller"
 	entity2 "bitcoinOrder/internal/domain/entity"
+	"bitcoinOrder/pkg/config/postgresql"
 	"bitcoinOrder/repository"
 	"bitcoinOrder/service"
 	"github.com/labstack/echo/v4"

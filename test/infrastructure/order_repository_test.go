@@ -1,8 +1,8 @@
 package infrastructure
 
 import (
-	"bitcoinOrder/config/postgresql"
 	"bitcoinOrder/internal/domain/entity"
+	"bitcoinOrder/pkg/config/postgresql"
 	"bitcoinOrder/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
