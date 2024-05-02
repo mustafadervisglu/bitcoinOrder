@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"bitcoinOrder/entity"
+	"bitcoinOrder/internal/domain/entity"
 	"errors"
 	"github.com/google/uuid"
 	"gorm.io/gorm"

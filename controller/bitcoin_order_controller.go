@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"bitcoinOrder/entity"
+	"bitcoinOrder/internal/domain/entity"
 	"bitcoinOrder/service"
 	"bitcoinOrder/service/dto"
 	"github.com/labstack/echo/v4"
@@ -30,22 +30,26 @@ func (b *BitcoinOrderController) CreateUser(c echo.Context) error {
 	if err := c.Bind(user); err != nil {
 		return c.JSON(http.StatusBadRequest, err.Error())
 	}
+
 	userDto := dto.UserDto{
 		Email:      user.Email,
 		UsdBalance: 0,
 		BtcBalance: 0,
 	}
+
 	if user.UsdBalance != nil {
 		userDto.UsdBalance = *user.UsdBalance
 	}
+
 	if user.BtcBalance != nil {
 		userDto.BtcBalance = *user.BtcBalance
 	}
-	err2 := b.bitcoinOrderService.CreateUser(userDto)
-	if err2 != nil {
-		return c.JSON(http.StatusBadRequest, err2.Error())
+
+	createdUser, err := b.bitcoinOrderService.CreateUser(userDto)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, err.Error())
 	}
-	return c.JSON(http.StatusOK, "User created successfully")
+	return c.JSON(http.StatusOK, createdUser)
 }
 
 func (b *BitcoinOrderController) GetBalance(c echo.Context) error {

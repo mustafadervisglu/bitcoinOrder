@@ -1,13 +1,13 @@
 package service
 
 import (
-	"bitcoinOrder/entity"
+	entity2 "bitcoinOrder/internal/domain/entity"
 	"bitcoinOrder/repository"
 	"bitcoinOrder/service/dto"
 )
 
 type IBitcoinOrderService interface {
-	CreateUser(user dto.UserDto) error
+	CreateUser(user dto.UserDto) (entity2.Users, error)
 	AddBalance(balanceDto dto.BalanceDto) error
 	FindAllOrder() ([]dto.OrderDto, error)
 	GetBalance(id string) (dto.UserDto, error)
@@ -19,8 +19,8 @@ type BitcoinOrderService struct {
 	bitcoinOrderRepository repository.IOrderRepository
 }
 
-func (b *BitcoinOrderService) CreateUser(userDto dto.UserDto) error {
-	userEntity := entity.Users{
+func (b *BitcoinOrderService) CreateUser(userDto dto.UserDto) (entity2.Users, error) {
+	userEntity := entity2.Users{
 		Email:      userDto.Email,
 		BtcBalance: &userDto.BtcBalance,
 		UsdBalance: &userDto.UsdBalance,
@@ -28,11 +28,10 @@ func (b *BitcoinOrderService) CreateUser(userDto dto.UserDto) error {
 
 	user, err := b.bitcoinOrderRepository.CreateUser(userEntity)
 	if err != nil {
-		return err
+		return entity2.Users{}, err
 	}
 
-	_ = user
-	return nil
+	return user, nil
 }
 
 func (b *BitcoinOrderService) AddBalance(balanceDto dto.BalanceDto) error {
@@ -74,7 +73,7 @@ func (b *BitcoinOrderService) GetBalance(id string) (dto.UserDto, error) {
 }
 
 func (b *BitcoinOrderService) CreateOrder(order dto.OrderDto) error {
-	orderEntity := entity.Order{
+	orderEntity := entity2.Order{
 		Asset:         order.Asset,
 		OrderPrice:    order.OrderPrice,
 		OrderQuantity: order.OrderQuantity,
