@@ -5,17 +5,17 @@ import (
 	"bitcoinOrder/internal/repository"
 )
 
-type TransactionService struct {
+type OrderCheckerService struct {
 	transactionRepo repository.ITransactionRepository
 }
 
-func NewTransactionService(repo repository.ITransactionRepository) *TransactionService {
-	return &TransactionService{
+func NewOrderCheckerService(repo repository.ITransactionRepository) *OrderCheckerService {
+	return &OrderCheckerService{
 		transactionRepo: repo,
 	}
 }
 
-func (s *TransactionService) ProcessTransactions() error {
+func (s *OrderCheckerService) ProcessTransactions() error {
 	orderMatches, err := s.transactionRepo.CheckOrder()
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (s *TransactionService) ProcessTransactions() error {
 	return s.UpdateBalances(orderMatches)
 }
 
-func (s *TransactionService) UpdateBalances(matches []entity.OrderMatch) error {
+func (s *OrderCheckerService) UpdateBalances(matches []entity.OrderMatch) error {
 	if len(matches) == 0 {
 		return nil
 	}

@@ -14,7 +14,7 @@ func main() {
 	db := postgresql.OpenDB(config)
 
 	transactionRepo := repository.NewTransactionRepository(db)
-	transactionService := service.NewTransactionService(transactionRepo)
+	transactionService := service.NewOrderCheckerService(transactionRepo)
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
