@@ -10,10 +10,17 @@ import (
 type IUserRepository interface {
 	CreateUser(user entity.Users) (entity.Users, error)
 	AddBalance(id string, asset string, amount float64) error
+	GetBalance(id string) (entity.Users, error)
 }
 
 type UserRepository struct {
 	gormDB *gorm.DB
+}
+
+func NewUserRepository(db *gorm.DB) IUserRepository {
+	return &UserRepository{
+		gormDB: db,
+	}
 }
 
 var ErrUserExists = errors.New("user already exists")
@@ -42,4 +49,8 @@ func (r *UserRepository) AddBalance(id string, asset string, amount float64) err
 		return errors.New("invalid asset")
 	}
 	return r.gormDB.Save(&user).Error
+}
+
+func (r *UserRepository) GetBalance(id string) (entity.Users, error) {
+	return utils.GetBalance(r.gormDB, id)
 }

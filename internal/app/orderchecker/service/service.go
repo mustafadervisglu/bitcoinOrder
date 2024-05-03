@@ -15,6 +15,11 @@ func NewOrderCheckerService(repo repository.ITransactionRepository) *OrderChecke
 	}
 }
 
+type IOrderCheckerService interface {
+	ProcessTransactions() error
+	UpdateBalances(matches []entity.OrderMatch) error
+}
+
 func (s *OrderCheckerService) ProcessTransactions() error {
 	orderMatches, err := s.transactionRepo.CheckOrder()
 	if err != nil {

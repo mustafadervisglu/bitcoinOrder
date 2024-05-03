@@ -9,7 +9,7 @@ import (
 )
 
 type IOrderRepository interface {
-	FindAllOrder() []entity.Order
+	FindAllOrder() ([]entity.Order, error)
 	CreateOrder(newOrder entity.Order) (entity.Order, error)
 	DeleteOrder(id string) (entity.Order, error)
 }
@@ -18,10 +18,18 @@ type OrderRepository struct {
 	gormDB *gorm.DB
 }
 
-func (o *OrderRepository) FindAllOrder() []entity.Order {
+func NewOrderRepository(db *gorm.DB) IOrderRepository {
+	return &OrderRepository{
+		gormDB: db,
+	}
+
+}
+func (o *OrderRepository) FindAllOrder() ([]entity.Order, error) {
 	var orders []entity.Order
-	o.gormDB.Find(&orders)
-	return orders
+	if err := o.gormDB.Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
 }
 
 func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, error) {
