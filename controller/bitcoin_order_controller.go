@@ -1,9 +1,9 @@
 package controller
 
 import (
+	"bitcoinOrder/internal/common/dto"
 	"bitcoinOrder/internal/domain/entity"
 	"bitcoinOrder/service"
-	"bitcoinOrder/service/dto"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )

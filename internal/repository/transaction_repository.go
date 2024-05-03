@@ -17,6 +17,12 @@ type TransactionRepository struct {
 	gormDB *gorm.DB
 }
 
+func NewTransactionRepository(db *gorm.DB) ITransactionRepository {
+	return &TransactionRepository{
+		gormDB: db,
+	}
+}
+
 func (o *TransactionRepository) CheckOrder() ([]entity.OrderMatch, error) {
 
 	if o.gormDB == nil {
@@ -72,11 +78,6 @@ func (o *TransactionRepository) CheckOrder() ([]entity.OrderMatch, error) {
 					break
 				}
 			}
-		}
-	}
-	if len(orderMatches) > 0 {
-		if err := o.UpdateBalance(orderMatches); err != nil {
-			return nil, err
 		}
 	}
 
