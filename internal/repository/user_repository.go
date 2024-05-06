@@ -27,7 +27,7 @@ var ErrUserExists = errors.New("user already exists")
 
 func (r *UserRepository) CreateUser(user entity.Users) (entity.Users, error) {
 	var existingUser entity.Users
-	if err := r.gormDB.Where("email = ?", user.Email).First(&existingUser).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := r.gormDB.Where("email = ?", user.Email).Take(&existingUser).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
 		return entity.Users{}, ErrUserExists
 	}
 

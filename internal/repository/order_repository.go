@@ -26,7 +26,7 @@ func NewOrderRepository(db *gorm.DB) IOrderRepository {
 }
 func (o *OrderRepository) FindAllOrder() ([]entity.Order, error) {
 	var orders []entity.Order
-	if err := o.gormDB.Find(&orders).Error; err != nil {
+	if err := o.gormDB.Select("id", "order_price", "order_status").Where("deleted_at IS NULL").Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	return orders, nil
@@ -43,7 +43,7 @@ func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, erro
 	}
 
 	var user entity.Users
-	if err := o.gormDB.First(&user, "id = ?", newOrder.UserID).Error; err != nil {
+	if err := o.gormDB.Take(&user, "id = ?", newOrder.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.Order{}, errors.New("user not found")
 		}
@@ -72,7 +72,7 @@ func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
 	if err != nil {
 		return entity.Order{}, err
 	}
-	result := o.gormDB.First(&order, "id = ?", uuidID)
+	result := o.gormDB.Take(&order, "id = ?", uuidID)
 
 	if result.Error != nil {
 		return entity.Order{}, result.Error

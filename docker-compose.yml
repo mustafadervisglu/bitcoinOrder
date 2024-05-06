@@ -1,0 +1,19 @@
+version: '3.7'
+services:
+  postgres:
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: order_app
+      POSTGRES_SHARED_BUFFERS: '256MB'
+      POSTGRES_WORK_MEM: '64MB'
+      POSTGRES_MAINTENANCE_WORK_MEM: '128MB'
+    ports:
+      - "6432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

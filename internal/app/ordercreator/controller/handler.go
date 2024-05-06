@@ -34,12 +34,12 @@ func (h *Handler) CreateOrder(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Order price and quantity must be positive")
 	}
 
-	createdOrder, err := h.Service.CreateOrder(orderDTO)
+	err := h.Service.CreateOrder(orderDTO)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to create order")
+		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.JSON(http.StatusCreated, createdOrder)
+	return nil
 }
 
 func (h *Handler) CreateUser(e echo.Context) error {
