@@ -129,7 +129,10 @@ func (o *TransactionRepository) MatchOrder(buyOrders, sellOrders []entity.Order)
 	return orderMatches, nil
 }
 func (o *TransactionRepository) SaveMatches(orderMatches []entity.OrderMatch) error {
-	panic("implement me")
+	if err := o.gormDB.Create(&orderMatches).Error; err != nil {
+		return err
+	}
+	return nil
 }
 func (o *TransactionRepository) UpdateBalance(orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
