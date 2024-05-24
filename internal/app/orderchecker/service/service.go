@@ -90,9 +90,9 @@ func (s *OrderCheckerService) UpdateUserBalances(orderMatches []entity.OrderMatc
 			return err
 		}
 
-		*buyUser.UsdBalance -= buyOrder.OrderPrice * match.OrderQuantity
+		*buyUser.UsdtBalance -= buyOrder.OrderPrice * match.OrderQuantity
 		*buyUser.BtcBalance += match.OrderQuantity
-		*sellUser.UsdBalance += sellOrder.OrderPrice * match.OrderQuantity
+		*sellUser.UsdtBalance += sellOrder.OrderPrice * match.OrderQuantity
 		*sellUser.BtcBalance -= match.OrderQuantity
 
 		if err := s.transactionRepo.UpdateBalance([]*entity.Users{buyUser, sellUser}); err != nil {

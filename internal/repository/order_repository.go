@@ -2,16 +2,16 @@ package repository
 
 import (
 	"bitcoinOrder/internal/domain/entity"
-	"bitcoinOrder/pkg/utils"
-	"errors"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"time"
 )
 
 type IOrderRepository interface {
-	FindAllOrder() ([]entity.Order, error)
+	FindOpenSellOrders() ([]entity.Order, error)
+	FindOpenBuyOrders() ([]entity.Order, error)
 	CreateOrder(newOrder entity.Order) (entity.Order, error)
-	DeleteOrder(id string) (entity.Order, error)
+	SoftDeleteOrder(orderId string) error
+	FindOpenOrdersByUser(userID string) ([]entity.Order, error)
 }
 
 type OrderRepository struct {
@@ -24,63 +24,45 @@ func NewOrderRepository(db *gorm.DB) IOrderRepository {
 	}
 
 }
-func (o *OrderRepository) FindAllOrder() ([]entity.Order, error) {
-	var orders []entity.Order
-	if err := o.gormDB.Select("id", "order_price", "order_status").Where("deleted_at IS NULL").Find(&orders).Error; err != nil {
-		return nil, err
-	}
-	return orders, nil
-}
-
 func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, error) {
-
-	if newOrder.OrderPrice <= 0 && newOrder.OrderQuantity <= 0 {
-		return entity.Order{}, errors.New("invalid order price")
-	}
-
-	if err := utils.ValidateOrderType(utils.OrderType(newOrder.Type)); err != nil {
-		return entity.Order{}, err
-	}
-
-	var user entity.Users
-	if err := o.gormDB.Take(&user, "id = ?", newOrder.UserID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.Order{}, errors.New("user not found")
-		}
-		return entity.Order{}, err
-	}
-	if newOrder.Type == "buy" {
-		if *user.UsdBalance < (newOrder.OrderQuantity * newOrder.OrderPrice) {
-			return entity.Order{}, errors.New("insufficient USD balance")
-		}
-	} else {
-		if newOrder.OrderQuantity > *user.BtcBalance {
-			return entity.Order{}, errors.New("insufficient BTC balance")
-		}
-	}
-
 	if err := o.gormDB.Create(&newOrder).Error; err != nil {
 		return entity.Order{}, err
 	}
-
 	return newOrder, nil
 }
 
-func (o *OrderRepository) DeleteOrder(id string) (entity.Order, error) {
-	var order entity.Order
-	uuidID, err := uuid.Parse(id)
-	if err != nil {
-		return entity.Order{}, err
+func (o *OrderRepository) SoftDeleteOrder(orderId string) error {
+	if err := o.gormDB.Model(&entity.Order{}).Where("id = ?", orderId).Update("deleted_at", time.Now()).Error; err != nil {
+		return err
 	}
-	result := o.gormDB.Take(&order, "id = ?", uuidID)
+	return nil
+}
 
-	if result.Error != nil {
-		return entity.Order{}, result.Error
+func (o *OrderRepository) FindOpenSellOrders() ([]entity.Order, error) {
+	var sellOrders []entity.Order
+	if err := o.gormDB.Where("deleted_at IS NOT NULL AND type = ?", "sell").
+		Order("created_at ASC").
+		Find(&sellOrders).Error; err != nil {
+		return nil, err
 	}
+	return sellOrders, nil
+}
 
-	if err := o.gormDB.Delete(&order).Error; err != nil {
-		return entity.Order{}, err
+func (o *OrderRepository) FindOpenBuyOrders() ([]entity.Order, error) {
+	var buyOrders []entity.Order
+	if err := o.gormDB.Where("deleted_at IS NOT NULL AND type = ? ", "buy").
+		Order("created_at DESC").
+		Find(&buyOrders).Error; err != nil {
+		return nil, err
 	}
+	return buyOrders, nil
+}
 
-	return order, nil
+func (o *OrderRepository) FindOpenOrdersByUser(userID string) ([]entity.Order, error) {
+	var orders []entity.Order
+	if err := o.gormDB.Where("user_id = ? AND deleted_at IS NULL", userID).
+		Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
 }

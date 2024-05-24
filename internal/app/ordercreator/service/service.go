@@ -4,6 +4,9 @@ import (
 	"bitcoinOrder/internal/common/dto"
 	"bitcoinOrder/internal/domain/entity"
 	"bitcoinOrder/internal/repository"
+	"bitcoinOrder/pkg/utils"
+	"errors"
+	"github.com/google/uuid"
 )
 
 type OrderCreatorService struct {
@@ -28,48 +31,83 @@ type IOrderCreatorService interface {
 }
 
 func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
+	if newOrder.OrderPrice <= 0 || newOrder.OrderQuantity <= 0 {
+		return errors.New("invalid order price or quantity")
+	}
+
+	if err := utils.ValidateOrderType(utils.OrderType(newOrder.Type)); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.FindUser(newOrder.UserID)
+	if err != nil {
+		return err
+	}
+
+	openOrders, err := s.orderRepo.FindOpenOrdersByUser(newOrder.UserID)
+	if err != nil {
+		return err
+	}
+	if newOrder.Type == "buy" {
+		totalOpenBuyValue := 0.0
+		for _, order := range openOrders {
+			if order.Type == "buy" {
+				totalOpenBuyValue += order.OrderPrice * order.OrderQuantity
+			}
+		}
+		if newOrder.OrderQuantity*newOrder.OrderPrice > *user.UsdtBalance-totalOpenBuyValue {
+			return errors.New("insufficient usdt balance for this order")
+		}
+	} else if newOrder.Type == "sell" {
+		totalOpenSellValue := 0.0
+		for _, order := range openOrders {
+			if order.Type == "sell" {
+				totalOpenSellValue += order.OrderPrice * order.OrderQuantity
+			}
+		}
+		if newOrder.OrderQuantity > *user.BtcBalance-totalOpenSellValue {
+			return errors.New("insufficient BTC balance for this order")
+		}
+
+	}
+
+	userID, err := uuid.Parse(newOrder.UserID)
+	if err != nil {
+		return err
+	}
 	orderEntity := entity.Order{
 		Asset:         newOrder.Asset,
 		OrderPrice:    newOrder.OrderPrice,
 		OrderQuantity: newOrder.OrderQuantity,
 		OrderStatus:   newOrder.OrderStatus,
-		UserID:        newOrder.UserID,
+		UserID:        userID,
 		Type:          newOrder.Type,
 	}
-	_, err := s.orderRepo.CreateOrder(orderEntity)
+	_, err = s.orderRepo.CreateOrder(orderEntity)
+
 	if err != nil {
 		return err
 	}
-	return nil
+
+	if newOrder.Type == "buy" {
+		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
+	} else {
+		*user.BtcBalance -= newOrder.OrderQuantity
+	}
+	return s.userRepo.UpdateUser(user)
 }
 
 func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, error) {
 	userEntity := entity.Users{
-		Email:      newUser.Email,
-		BtcBalance: &newUser.BtcBalance,
-		UsdBalance: &newUser.UsdBalance,
+		Email:       newUser.Email,
+		BtcBalance:  &newUser.BtcBalance,
+		UsdtBalance: &newUser.UsdtBalance,
 	}
 	user, err := s.userRepo.CreateUser(userEntity)
 	if err != nil {
 		return user, err
 	}
 	return user, nil
-}
-
-func (s *OrderCreatorService) FindAllOrder() ([]entity.Order, error) {
-	orders, err := s.orderRepo.FindAllOrder()
-	if err != nil {
-		return orders, err
-	}
-	return orders, nil
-}
-
-func (s *OrderCreatorService) DeleteOrder(id string) (entity.Order, error) {
-	res, err := s.orderRepo.DeleteOrder(id)
-	if err != nil {
-		return res, err
-	}
-	return res, nil
 }
 
 func (s *OrderCreatorService) GetBalance(id string) (dto.UserDto, error) {
@@ -79,16 +117,25 @@ func (s *OrderCreatorService) GetBalance(id string) (dto.UserDto, error) {
 	}
 
 	balance := dto.UserDto{
-		Email:      user.Email,
-		UsdBalance: *user.UsdBalance,
-		BtcBalance: *user.BtcBalance,
+		Email:       user.Email,
+		UsdtBalance: *user.UsdtBalance,
+		BtcBalance:  *user.BtcBalance,
 	}
 	return balance, nil
 }
 func (s *OrderCreatorService) AddBalance(balance dto.BalanceDto) error {
-	err := s.userRepo.AddBalance(balance.Id, balance.Asset, balance.Amount)
+	user, err := s.userRepo.FindUser(balance.Id)
 	if err != nil {
 		return err
 	}
-	return nil
+
+	switch balance.Asset {
+	case "BTC":
+		*user.BtcBalance += balance.Amount
+	case "USD":
+		*user.UsdtBalance += balance.Amount
+	default:
+		return errors.New("invalid asset")
+	}
+	return s.userRepo.UpdateUser(user)
 }
