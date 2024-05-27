@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"log"
 	"time"
 )
 
@@ -32,24 +33,24 @@ func NewTransactionRepository(db *gorm.DB) ITransactionRepository {
 	}
 }
 
-func (o *TransactionRepository) FindSellOrders(tx *gorm.DB) ([]entity.Order, error) {
-	var sellOrders []entity.Order
-	if err := tx.Where("order_status = ? AND type = ?", true, "sell").
-		Order("order_price DESC, created_at ASC").
-		Find(&sellOrders).Error; err != nil {
-		return nil, err
-	}
-	return sellOrders, nil
-}
-
 func (o *TransactionRepository) FindBuyOrders(tx *gorm.DB) ([]entity.Order, error) {
 	var buyOrders []entity.Order
-	if err := tx.Where("order_status = ? AND type = ?", true, "buy").
+	if err := tx.Joins("User").Where("order_status = ? AND type = ?", true, "buy").
 		Order("order_price ASC , created_at ASC").
 		Find(&buyOrders).Error; err != nil {
 		return nil, err
 	}
 	return buyOrders, nil
+}
+
+func (o *TransactionRepository) FindSellOrders(tx *gorm.DB) ([]entity.Order, error) {
+	var sellOrders []entity.Order
+	if err := tx.Joins("User").Where("order_status = ? AND type = ?", true, "sell").
+		Order("order_price DESC, created_at ASC").
+		Find(&sellOrders).Error; err != nil {
+		return nil, err
+	}
+	return sellOrders, nil
 }
 
 func (o *TransactionRepository) SaveMatches(tx *gorm.DB, orderMatches []entity.OrderMatch) error {
@@ -90,9 +91,11 @@ func (o *TransactionRepository) getIDsFromUsers(users []*entity.Users) []uuid.UU
 
 func (o *TransactionRepository) FindOrderById(tx *gorm.DB, orderId uuid.UUID) (entity.Order, error) {
 	var order entity.Order
-	if err := tx.Preload("User").Take(&order, "id", orderId).Error; err != nil {
+	if err := tx.Preload("User").Take(&order, "id = ?", orderId).Error; err != nil {
+		log.Println(order.User)
 		return entity.Order{}, err
 	}
+	log.Println(order.User)
 	return order, nil
 }
 
@@ -125,16 +128,18 @@ func (o *TransactionRepository) UpdateOrders(tx *gorm.DB, orders []*entity.Order
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Where("id IN (?)", o.getIdsFromOrders(orders)).
 		Updates(updates).Error; err != nil {
+
 		return err
 	}
-
 	return nil
 }
 func (o *TransactionRepository) getIdsFromOrders(orders []*entity.Order) []uuid.UUID {
 	var ids []uuid.UUID
+
 	for _, order := range orders {
 		ids = append(ids, order.ID)
 	}
+	log.Println(ids)
 	return ids
 }
 

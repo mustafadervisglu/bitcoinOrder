@@ -21,7 +21,7 @@ func main() {
 
 	db, err := database.NewDBConnection(dbConfig)
 	if err != nil {
-		log.Fatalf("Veritabanına bağlanılamadı: %v", err)
+		log.Fatalf("could not connect to database: %v", err)
 	}
 	defer func() {
 		sqlDB, _ := db.DB()

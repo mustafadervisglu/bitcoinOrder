@@ -32,10 +32,12 @@ type IOrderCreatorService interface {
 	AddBalance(balance dto.BalanceDto) error
 }
 
+var ErrInvalidOrderPriceOrQuantity = errors.New("invalid order price or quantity")
+
 func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 
 	if newOrder.OrderPrice <= 0 || newOrder.OrderQuantity <= 0 {
-		return errors.New("invalid order price or quantity")
+		return ErrInvalidOrderPriceOrQuantity
 	}
 
 	if err := utils.ValidateOrderType(utils.OrderType(newOrder.Type)); err != nil {
@@ -93,12 +95,14 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		OrderStatus:   newOrder.OrderStatus,
 		UserID:        userID,
 		Type:          newOrder.Type,
+		User:          user,
 	}
 	_, err = s.orderRepo.CreateOrder(orderEntity)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
+
 	if newOrder.Type == "buy" {
 		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
 	} else {
@@ -114,10 +118,13 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 }
 
 func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, error) {
+	btcBalance := newUser.BtcBalance
+	usdtBalance := newUser.UsdtBalance
+
 	userEntity := entity.Users{
 		Email:       newUser.Email,
-		BtcBalance:  &newUser.BtcBalance,
-		UsdtBalance: &newUser.UsdtBalance,
+		BtcBalance:  &btcBalance,
+		UsdtBalance: &usdtBalance,
 	}
 	user, err := s.userRepo.CreateUser(userEntity)
 	if err != nil {

@@ -22,7 +22,6 @@ func NewDBConnection(config *Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to database: %w", err)
 	}
-
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("database connection could not be obtained: %w", err)
@@ -31,7 +30,8 @@ func NewDBConnection(config *Config) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	log.Println("successfully connected to the database!!")
+	log.Println("successfully connected to the database !!")
+
 	return db, nil
 }
 
