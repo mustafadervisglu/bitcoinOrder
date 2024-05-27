@@ -12,7 +12,7 @@ type Order struct {
 	UserID        uuid.UUID `gorm:"type:uuid;not null;index"`
 	Type          string    `gorm:"type:varchar(10);not null;index:idx_order_type"`
 	Asset         string    `gorm:"type:varchar(255);index"`
-	OrderPrice    float64   `gorm:"type:double precision"`
+	OrderPrice    float64   `gorm:"type:double precision;index:idx_order_price_type_status"`
 	OrderQuantity float64   `gorm:"type:double precision"`
 	OrderStatus   bool      `gorm:"type:boolean;default:true;index:idx_order_status"`
 	CreatedAt     time.Time

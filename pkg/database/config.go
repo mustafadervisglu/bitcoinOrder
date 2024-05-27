@@ -1,10 +1,10 @@
-package postgresql
+package database
 
 type Config struct {
 	Host     string
 	User     string
 	Password string
-	DbName   string
+	DBName   string
 	Port     string
 	SSLMode  string
 	TimeZone string

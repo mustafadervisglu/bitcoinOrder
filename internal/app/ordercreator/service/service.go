@@ -7,17 +7,20 @@ import (
 	"bitcoinOrder/pkg/utils"
 	"errors"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type OrderCreatorService struct {
 	orderRepo repository.IOrderRepository
 	userRepo  repository.IUserRepository
+	gormDB    *gorm.DB
 }
 
-func NewOrderCreatorService(orderRepo repository.IOrderRepository, userRepo repository.IUserRepository) *OrderCreatorService {
+func NewOrderCreatorService(orderRepo repository.IOrderRepository, userRepo repository.IUserRepository, gormDB *gorm.DB) *OrderCreatorService {
 	return &OrderCreatorService{
 		orderRepo: orderRepo,
 		userRepo:  userRepo,
+		gormDB:    gormDB,
 	}
 }
 
@@ -25,12 +28,12 @@ type IOrderCreatorService interface {
 	CreateOrder(newOrder dto.OrderDto) error
 	CreateUser(newUser dto.UserDto) (entity.Users, error)
 	FindAllOrder() ([]entity.Order, error)
-	DeleteOrder(id string) (entity.Order, error)
 	GetBalance(id string) (dto.UserDto, error)
 	AddBalance(balance dto.BalanceDto) error
 }
 
 func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
+
 	if newOrder.OrderPrice <= 0 || newOrder.OrderQuantity <= 0 {
 		return errors.New("invalid order price or quantity")
 	}
@@ -39,13 +42,20 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		return err
 	}
 
+	tx := s.gormDB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
 	user, err := s.userRepo.FindUser(newOrder.UserID)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 
 	openOrders, err := s.orderRepo.FindOpenOrdersByUser(newOrder.UserID)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 	if newOrder.Type == "buy" {
@@ -73,6 +83,7 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 
 	userID, err := uuid.Parse(newOrder.UserID)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 	orderEntity := entity.Order{
@@ -84,17 +95,22 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		Type:          newOrder.Type,
 	}
 	_, err = s.orderRepo.CreateOrder(orderEntity)
-
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-
 	if newOrder.Type == "buy" {
 		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
 	} else {
 		*user.BtcBalance -= newOrder.OrderQuantity
 	}
-	return s.userRepo.UpdateUser(user)
+	err = s.userRepo.UpdateUser(user)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, error) {
@@ -138,4 +154,12 @@ func (s *OrderCreatorService) AddBalance(balance dto.BalanceDto) error {
 		return errors.New("invalid asset")
 	}
 	return s.userRepo.UpdateUser(user)
+}
+
+func (s *OrderCreatorService) FindAllOrder() ([]entity.Order, error) {
+	orders, err := s.orderRepo.FindAllOrders()
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
 }

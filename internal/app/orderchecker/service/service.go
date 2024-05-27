@@ -4,113 +4,118 @@ import (
 	"bitcoinOrder/internal/domain/entity"
 	"bitcoinOrder/internal/repository"
 	"bitcoinOrder/pkg/utils"
+	"gorm.io/gorm"
+	"sort"
 	"time"
 )
 
 type OrderCheckerService struct {
 	transactionRepo repository.ITransactionRepository
+	gormDB          *gorm.DB
 }
 
-func NewOrderCheckerService(repo repository.ITransactionRepository) *OrderCheckerService {
+func NewOrderCheckerService(repo repository.ITransactionRepository, gormDB *gorm.DB) *OrderCheckerService {
 	return &OrderCheckerService{
 		transactionRepo: repo,
+		gormDB:          gormDB,
 	}
 }
 
-func (s *OrderCheckerService) MatchOrder(buyOrders, sellOrders []entity.Order) ([]entity.OrderMatch, error) {
+func (s *OrderCheckerService) MatchOrder(tx *gorm.DB, buyOrders, sellOrders []entity.Order) ([]entity.OrderMatch, error) {
 	var orderMatches []entity.OrderMatch
 	var ordersToUpdate []*entity.Order
 
-	for i := 0; i < len(buyOrders); i++ {
-		for j := 0; j < len(sellOrders); j++ {
-			buyOrder := &buyOrders[i]
-			sellOrder := &sellOrders[j]
+	sort.Slice(buyOrders, func(i, j int) bool {
+		return buyOrders[i].OrderPrice < buyOrders[j].OrderPrice
+	})
+	sort.Slice(sellOrders, func(i, j int) bool {
+		return sellOrders[i].OrderPrice > sellOrders[j].OrderPrice
+	})
 
-			if buyOrder.OrderPrice == sellOrder.OrderPrice {
-				matchQuantity := utils.MinQuantity(buyOrder.OrderQuantity, sellOrder.OrderQuantity)
-				orderMatch := entity.OrderMatch{
-					OrderID1:      buyOrder.ID,
-					OrderID2:      sellOrder.ID,
-					OrderQuantity: matchQuantity,
-					MatchedAt:     time.Now(),
-				}
-				orderMatches = append(orderMatches, orderMatch)
+	i := 0
+	j := 0
 
-				buyOrder.OrderQuantity -= matchQuantity
-				sellOrder.OrderQuantity -= matchQuantity
+	for i < len(buyOrders) && j < len(sellOrders) {
+		buyOrder := &buyOrders[i]
+		sellOrder := &sellOrders[j]
 
-				ordersToUpdate = append(ordersToUpdate, buyOrder, sellOrder)
+		if buyOrder.OrderPrice >= sellOrder.OrderPrice {
+			matchQuantity := utils.MinQuantity(buyOrder.OrderQuantity, sellOrder.OrderQuantity)
+			orderMatch := entity.OrderMatch{
+				OrderID1:      buyOrder.ID,
+				OrderID2:      sellOrder.ID,
+				OrderQuantity: matchQuantity,
+				MatchedAt:     time.Now(),
+			}
+			orderMatches = append(orderMatches, orderMatch)
 
+			buyOrder.OrderQuantity -= matchQuantity
+			sellOrder.OrderQuantity -= matchQuantity
+
+			if buyOrder.OrderQuantity == 0 {
+				buyOrder.OrderStatus = false
 				now := time.Now()
+				buyOrder.CompletedAt = &now
+				i++
+			}
+			if sellOrder.OrderQuantity == 0 {
+				sellOrder.OrderStatus = false
+				now := time.Now()
+				sellOrder.CompletedAt = &now
+				j++
+			}
+			ordersToUpdate = append(ordersToUpdate, buyOrder, sellOrder)
 
-				if buyOrder.OrderQuantity == 0 {
-					buyOrder.OrderStatus = false
-					buyOrder.CompletedAt = &now
-
-				}
-				if sellOrder.OrderQuantity == 0 {
-					sellOrder.OrderStatus = false
-					sellOrder.CompletedAt = &now
-
-				}
+		} else {
+			if buyOrder.OrderPrice < sellOrder.OrderPrice {
+				i++
+			} else {
+				j++
 			}
 		}
 	}
 
-	if err := s.transactionRepo.UpdateOrders(ordersToUpdate); err != nil {
+	if err := s.transactionRepo.UpdateOrders(tx, ordersToUpdate); err != nil {
 		return nil, err
 	}
-
-	if err := s.transactionRepo.SaveMatches(orderMatches); err != nil {
+	if err := s.transactionRepo.SaveMatches(tx, orderMatches); err != nil {
 		return nil, err
 	}
 
 	return orderMatches, nil
 }
-
-func (s *OrderCheckerService) UpdateUserBalances(orderMatches []entity.OrderMatch) error {
+func (s *OrderCheckerService) UpdateUserBalances(tx *gorm.DB, orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
-		buyOrder, err := s.transactionRepo.FindOrderById(match.OrderID1)
+		buyOrder, err := s.transactionRepo.FindOrderById(tx, match.OrderID1)
 		if err != nil {
 			return err
 		}
-
-		sellOrder, err := s.transactionRepo.FindOrderById(match.OrderID2)
+		sellOrder, err := s.transactionRepo.FindOrderById(tx, match.OrderID2)
 		if err != nil {
 			return err
 		}
-
-		buyUser, err := s.transactionRepo.FindUserById(buyOrder.UserID)
-		if err != nil {
-			return err
-		}
-
-		sellUser, err := s.transactionRepo.FindUserById(sellOrder.UserID)
-		if err != nil {
-			return err
-		}
+		buyUser := &buyOrder.User
+		sellUser := &sellOrder.User
 
 		*buyUser.UsdtBalance -= buyOrder.OrderPrice * match.OrderQuantity
 		*buyUser.BtcBalance += match.OrderQuantity
 		*sellUser.UsdtBalance += sellOrder.OrderPrice * match.OrderQuantity
 		*sellUser.BtcBalance -= match.OrderQuantity
-
-		if err := s.transactionRepo.UpdateBalance([]*entity.Users{buyUser, sellUser}); err != nil {
+		if err := s.transactionRepo.UpdateBalance(tx, []*entity.Users{buyUser, sellUser}); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (s *OrderCheckerService) SoftDeleteOrderMatch(orderMatches []entity.OrderMatch) error {
+func (s *OrderCheckerService) SoftDeleteOrderMatch(tx *gorm.DB, orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
-		fetchedMatch, err := s.transactionRepo.FetchMatch(match.OrderID1, match.OrderID2)
+		fetchedMatch, err := s.transactionRepo.FetchMatch(tx, match.OrderID1, match.OrderID2)
 		if err != nil {
 			return err
 		}
 		if fetchedMatch != nil {
-			if err := s.transactionRepo.SoftDeleteMatch(fetchedMatch.ID); err != nil {
+			if err := s.transactionRepo.SoftDeleteMatch(tx, fetchedMatch.ID); err != nil {
 				return err
 			}
 		}
@@ -119,27 +124,32 @@ func (s *OrderCheckerService) SoftDeleteOrderMatch(orderMatches []entity.OrderMa
 }
 
 func (s *OrderCheckerService) ProcessTransactions() error {
-	buyOrders, err := s.transactionRepo.FindBuyOrders()
+	tx := s.gormDB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	buyOrders, err := s.transactionRepo.FindBuyOrders(tx)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-	sellOrders, err := s.transactionRepo.FindSellOrders()
+	sellOrders, err := s.transactionRepo.FindSellOrders(tx)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	orderMatches, err := s.MatchOrder(buyOrders, sellOrders)
+	orderMatches, err := s.MatchOrder(tx, buyOrders, sellOrders)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	if err := s.UpdateUserBalances(orderMatches); err != nil {
+	if err := s.UpdateUserBalances(tx, orderMatches); err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	if err := s.SoftDeleteOrderMatch(orderMatches); err != nil {
+	if err := s.SoftDeleteOrderMatch(tx, orderMatches); err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	return nil
+	return tx.Commit().Error
 }

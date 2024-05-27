@@ -13,7 +13,7 @@ type OrderDto struct {
 type UserDto struct {
 	Email       string  `json:"Email"`
 	BtcBalance  float64 `json:"BtcBalance"`
-	UsdtBalance float64 `json:"UsdBalance"`
+	UsdtBalance float64 `json:"UsdtBalance"`
 }
 
 type OrderMatchDto struct {

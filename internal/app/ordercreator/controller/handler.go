@@ -3,6 +3,7 @@ package controller
 import (
 	"bitcoinOrder/internal/app/ordercreator/service"
 	"bitcoinOrder/internal/common/dto"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )
@@ -56,14 +57,18 @@ func (h *Handler) CreateUser(e echo.Context) error {
 }
 func (h *Handler) AddBalance(e echo.Context) error {
 	var balance dto.BalanceDto
-
 	balance.Id = e.Param("id")
 	balance.Asset = e.Param("asset")
+
+	userID, err := uuid.Parse(balance.Id)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid user ID")
+	}
+	balance.Id = userID.String()
 
 	if err := e.Bind(&balance); err != nil {
 		return e.JSON(http.StatusBadRequest, err.Error())
 	}
-
 	if err := h.Service.AddBalance(balance); err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
