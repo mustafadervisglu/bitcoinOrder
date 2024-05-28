@@ -13,7 +13,8 @@ type IOrderRepository interface {
 	SoftDeleteOrder(orderId string) error
 	FindOpenOrdersByUser(userID string) ([]entity.Order, error)
 	FindAllOrders() ([]entity.Order, error)
-	UpdateUserOrders(tx *gorm.DB, user *entity.Users, order *entity.Order) error
+	UpdateUserOrders(user *entity.Users, order *entity.Order) error
+	UpdateOrder(order entity.Order) error
 }
 
 type OrderRepository struct {
@@ -32,8 +33,8 @@ func (o *OrderRepository) CreateOrder(newOrder entity.Order) (entity.Order, erro
 	}
 	return newOrder, nil
 }
-func (o *OrderRepository) UpdateUserOrders(tx *gorm.DB, user *entity.Users, order *entity.Order) error {
-	return tx.Model(user).Association("Orders").Append(order)
+func (o *OrderRepository) UpdateUserOrders(user *entity.Users, order *entity.Order) error {
+	return o.gormDB.Model(user).Association("Orders").Append(order)
 }
 
 func (o *OrderRepository) SoftDeleteOrder(orderId string) error {
@@ -78,4 +79,10 @@ func (o *OrderRepository) FindAllOrders() ([]entity.Order, error) {
 		return nil, err
 	}
 	return orders, nil
+}
+
+func (o *OrderRepository) UpdateOrder(order entity.Order) error {
+	return o.gormDB.Model(&order).Updates(map[string]interface{}{
+		"order_quantity": order.OrderQuantity,
+	}).Error
 }

@@ -14,6 +14,7 @@ type IUserRepository interface {
 	GetBalance(id string) (entity.Users, error)
 	FindUser(id string) (entity.Users, error)
 	FindUserByEmail(email email.Email) (entity.Users, error)
+	FindAllUser() ([]entity.Users, error)
 }
 
 type UserRepository struct {
@@ -60,4 +61,13 @@ func (r *UserRepository) FindUserByEmail(email email.Email) (entity.Users, error
 		return entity.Users{}, ErrUserExists
 	}
 	return existingUser, nil
+}
+
+func (r *UserRepository) FindAllUser() ([]entity.Users, error) {
+	var users []entity.Users
+
+	if err := r.gormDB.Take(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }

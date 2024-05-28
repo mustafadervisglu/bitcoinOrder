@@ -22,6 +22,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.POST("/api/v1/user/addBalance/:id/:asset", h.AddBalance)
 	e.GET("/api/v1/user/:id", h.GetBalance)
 	e.GET("/api/v1/allOrder", h.FindAllOrder)
+	e.GET("api/v1/allUser", h.FindAllUser)
 }
 
 func (h *Handler) CreateOrder(c echo.Context) error {
@@ -89,4 +90,12 @@ func (h *Handler) FindAllOrder(e echo.Context) error {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 	return e.JSON(http.StatusOK, orders)
+}
+
+func (h *Handler) FindAllUser(c echo.Context) error {
+	users, err := h.Service.FindAllUser()
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, users)
 }

@@ -30,6 +30,7 @@ type IOrderCreatorService interface {
 	FindAllOrder() ([]entity.Order, error)
 	GetBalance(id string) (dto.UserDto, error)
 	AddBalance(balance dto.BalanceDto) error
+	FindAllUser() ([]entity.Users, error)
 }
 
 var ErrInvalidOrderPriceOrQuantity = errors.New("invalid order price or quantity")
@@ -48,44 +49,103 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
 
-	user, err := s.userRepo.FindUser(newOrder.UserID)
+	user, openOrders, err := s.fetchUserData(newOrder.UserID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	openOrders, err := s.orderRepo.FindOpenOrdersByUser(newOrder.UserID)
+	existingOrder := s.findExistingOrder(openOrders, newOrder)
+
+	if existingOrder != nil {
+
+		err = s.updateExistingOrder(user, existingOrder, newOrder)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	} else {
+
+		err = s.createNewOrder(user, openOrders, newOrder)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit().Error
+}
+
+func (s *OrderCreatorService) fetchUserData(userID string) (entity.Users, []entity.Order, error) {
+	user, err := s.userRepo.FindUser(userID)
 	if err != nil {
-		tx.Rollback()
+		return entity.Users{}, nil, err
+	}
+
+	openOrders, err := s.orderRepo.FindOpenOrdersByUser(userID)
+	if err != nil {
+		return entity.Users{}, nil, err
+	}
+
+	return user, openOrders, nil
+}
+
+func (s *OrderCreatorService) findExistingOrder(openOrders []entity.Order, newOrder dto.OrderDto) *entity.Order {
+	for _, order := range openOrders {
+		if order.Type == newOrder.Type && order.OrderPrice == newOrder.OrderPrice && order.OrderStatus {
+			return &order
+		}
+	}
+	return nil
+}
+
+func (s *OrderCreatorService) updateExistingOrder(user entity.Users, existingOrder *entity.Order, newOrder dto.OrderDto) error {
+	if newOrder.Type == "buy" {
+		if newOrder.OrderQuantity*newOrder.OrderPrice > *user.UsdtBalance-existingOrder.OrderPrice*existingOrder.OrderQuantity {
+			return errors.New("insufficient usdt balance for this order")
+		}
+		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
+	} else {
+		if newOrder.OrderQuantity+existingOrder.OrderQuantity > *user.BtcBalance {
+			return errors.New("insufficient BTC balance for this order")
+		}
+		*user.BtcBalance -= newOrder.OrderQuantity
+	}
+
+	existingOrder.OrderQuantity += newOrder.OrderQuantity
+	if err := s.orderRepo.UpdateOrder(*existingOrder); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *OrderCreatorService) createNewOrder(user entity.Users, openOrders []entity.Order, newOrder dto.OrderDto) error {
 	if newOrder.Type == "buy" {
 		totalOpenBuyValue := 0.0
 		for _, order := range openOrders {
-			if order.Type == "buy" {
+			if order.Type == "buy" && order.OrderStatus {
 				totalOpenBuyValue += order.OrderPrice * order.OrderQuantity
 			}
 		}
 		if newOrder.OrderQuantity*newOrder.OrderPrice > *user.UsdtBalance-totalOpenBuyValue {
 			return errors.New("insufficient usdt balance for this order")
 		}
-	} else if newOrder.Type == "sell" {
-		totalOpenSellValue := 0.0
-		for _, order := range openOrders {
-			if order.Type == "sell" {
-				totalOpenSellValue += order.OrderPrice * order.OrderQuantity
-			}
-		}
-		if newOrder.OrderQuantity > *user.BtcBalance-totalOpenSellValue {
+		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
+	} else {
+		if newOrder.OrderQuantity > *user.BtcBalance {
 			return errors.New("insufficient BTC balance for this order")
 		}
-
+		*user.BtcBalance -= newOrder.OrderQuantity
 	}
 
 	userID, err := uuid.Parse(newOrder.UserID)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
 	orderEntity := entity.Order{
@@ -98,23 +158,7 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		User:          user,
 	}
 	_, err = s.orderRepo.CreateOrder(orderEntity)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if newOrder.Type == "buy" {
-		*user.UsdtBalance -= newOrder.OrderQuantity * newOrder.OrderPrice
-	} else {
-		*user.BtcBalance -= newOrder.OrderQuantity
-	}
-	err = s.userRepo.UpdateUser(user)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit().Error
+	return err
 }
 
 func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, error) {
@@ -146,6 +190,7 @@ func (s *OrderCreatorService) GetBalance(id string) (dto.UserDto, error) {
 	}
 	return balance, nil
 }
+
 func (s *OrderCreatorService) AddBalance(balance dto.BalanceDto) error {
 	user, err := s.userRepo.FindUser(balance.Id)
 	if err != nil {
@@ -169,4 +214,8 @@ func (s *OrderCreatorService) FindAllOrder() ([]entity.Order, error) {
 		return nil, err
 	}
 	return orders, nil
+}
+
+func (s *OrderCreatorService) FindAllUser() ([]entity.Users, error) {
+	return s.userRepo.FindAllUser()
 }

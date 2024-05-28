@@ -17,6 +17,6 @@ type Order struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	DeletedAt     gorm.DeletedAt `gorm:"index"`
-	CompletedAt   *time.Time     `gorm:"default:null"`
+	CompletedAt   *time.Time     `gorm:"default:NULL"`
 	User          Users          `gorm:"foreignKey:UserID"`
 }

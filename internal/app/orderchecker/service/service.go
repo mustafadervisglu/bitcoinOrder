@@ -25,11 +25,11 @@ func (s *OrderCheckerService) MatchOrder(tx *gorm.DB, buyOrders, sellOrders []en
 
 	var orderMatches []entity.OrderMatch
 	var ordersToUpdate []*entity.Order
-
 	if len(buyOrders) == 0 || len(sellOrders) == 0 {
 		return nil, nil
 	}
 	sort.Slice(buyOrders, func(i, j int) bool {
+
 		if buyOrders[i].OrderPrice == buyOrders[j].OrderPrice {
 			return buyOrders[i].CreatedAt.Before(buyOrders[j].CreatedAt)
 		}
@@ -76,7 +76,7 @@ func (s *OrderCheckerService) MatchOrder(tx *gorm.DB, buyOrders, sellOrders []en
 				buyOrder.CompletedAt = &now
 				i++
 			} else {
-				buyOrder.CompletedAt = &time.Time{}
+				buyOrder.CompletedAt = nil
 			}
 			if sellOrder.OrderQuantity == 0 {
 				sellOrder.OrderStatus = false
@@ -84,7 +84,7 @@ func (s *OrderCheckerService) MatchOrder(tx *gorm.DB, buyOrders, sellOrders []en
 				sellOrder.CompletedAt = &now
 				j++
 			} else {
-				sellOrder.CompletedAt = &time.Time{}
+				sellOrder.CompletedAt = nil
 			}
 
 			ordersToUpdate = append(ordersToUpdate, buyOrder, sellOrder)
@@ -107,6 +107,7 @@ func (s *OrderCheckerService) MatchOrder(tx *gorm.DB, buyOrders, sellOrders []en
 	}
 	return orderMatches, nil
 }
+
 func (s *OrderCheckerService) UpdateUserBalances(tx *gorm.DB, orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
 		buyOrder, err := s.transactionRepo.FindOrderById(tx, match.OrderID1)
@@ -117,15 +118,24 @@ func (s *OrderCheckerService) UpdateUserBalances(tx *gorm.DB, orderMatches []ent
 		if err != nil {
 			return err
 		}
+
 		buyUser := &buyOrder.User
 		sellUser := &sellOrder.User
 
-		*buyUser.UsdtBalance -= buyOrder.OrderPrice * match.OrderQuantity
-		*buyUser.BtcBalance += match.OrderQuantity
-		*sellUser.UsdtBalance += sellOrder.OrderPrice * match.OrderQuantity
-		*sellUser.BtcBalance -= match.OrderQuantity
-		if err := s.transactionRepo.UpdateBalance(tx, []*entity.Users{buyUser, sellUser}); err != nil {
-			return err
+		if buyUser.ID == sellUser.ID {
+			*buyUser.UsdtBalance -= buyOrder.OrderPrice * match.OrderQuantity
+			*buyUser.BtcBalance += match.OrderQuantity
+			if err := s.transactionRepo.UpdateBalance(tx, []*entity.Users{buyUser}); err != nil {
+				return err
+			}
+		} else {
+			*buyUser.UsdtBalance -= buyOrder.OrderPrice * match.OrderQuantity
+			*buyUser.BtcBalance += match.OrderQuantity
+			*sellUser.UsdtBalance += sellOrder.OrderPrice * match.OrderQuantity
+			*sellUser.BtcBalance -= match.OrderQuantity
+			if err := s.transactionRepo.UpdateBalance(tx, []*entity.Users{buyUser, sellUser}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

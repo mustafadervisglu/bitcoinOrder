@@ -5,8 +5,6 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-	"log"
 	"time"
 )
 
@@ -64,21 +62,15 @@ func (o *TransactionRepository) SaveMatches(tx *gorm.DB, orderMatches []entity.O
 }
 
 func (o *TransactionRepository) UpdateBalance(tx *gorm.DB, users []*entity.Users) error {
-	var updates []map[string]interface{}
 	for _, user := range users {
-		updates = append(updates, map[string]interface{}{
+		updateMap := map[string]interface{}{
 			"usdt_balance": user.UsdtBalance,
 			"btc_balance":  user.BtcBalance,
-		})
+		}
+		if err := tx.Model(&entity.Users{}).Where("id = ?", user.ID).Updates(updateMap).Error; err != nil {
+			return err
+		}
 	}
-
-	if err := tx.Model(&entity.Users{}).
-		Clauses(clause.OnConflict{DoNothing: true}).
-		Where("id IN (?)", o.getIDsFromUsers(users)).
-		Updates(updates).Error; err != nil {
-		return err
-	}
-
 	return nil
 }
 func (o *TransactionRepository) getIDsFromUsers(users []*entity.Users) []uuid.UUID {
@@ -92,10 +84,8 @@ func (o *TransactionRepository) getIDsFromUsers(users []*entity.Users) []uuid.UU
 func (o *TransactionRepository) FindOrderById(tx *gorm.DB, orderId uuid.UUID) (entity.Order, error) {
 	var order entity.Order
 	if err := tx.Preload("User").Take(&order, "id = ?", orderId).Error; err != nil {
-		log.Println(order.User)
 		return entity.Order{}, err
 	}
-	log.Println(order.User)
 	return order, nil
 }
 
@@ -113,23 +103,20 @@ func (o *TransactionRepository) SoftDeleteOrder(tx *gorm.DB, orderId uuid.UUID) 
 	}
 	return nil
 }
-
 func (o *TransactionRepository) UpdateOrders(tx *gorm.DB, orders []*entity.Order) error {
-	var updates []map[string]interface{}
 	for _, order := range orders {
-		updates = append(updates, map[string]interface{}{
+		updateMap := map[string]interface{}{
 			"order_quantity": order.OrderQuantity,
 			"order_status":   order.OrderStatus,
-			"completed_at":   order.CompletedAt,
-		})
-	}
-	// bylk update
-	if err := tx.Model(&entity.Order{}).
-		Clauses(clause.OnConflict{DoNothing: true}).
-		Where("id IN (?)", o.getIdsFromOrders(orders)).
-		Updates(updates).Error; err != nil {
+		}
 
-		return err
+		if order.CompletedAt != nil {
+			updateMap["completed_at"] = order.CompletedAt
+		}
+
+		if err := tx.Model(&entity.Order{}).Where("id = ?", order.ID).Updates(updateMap).Error; err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -139,7 +126,6 @@ func (o *TransactionRepository) getIdsFromOrders(orders []*entity.Order) []uuid.
 	for _, order := range orders {
 		ids = append(ids, order.ID)
 	}
-	log.Println(ids)
 	return ids
 }
 
