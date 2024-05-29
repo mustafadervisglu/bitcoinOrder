@@ -12,7 +12,7 @@ type Handler struct {
 	Service service.IOrderCreatorService
 }
 
-func NewOrderCreatorHandler(service service.IOrderCreatorService) *Handler {
+func NewOrderCreatorHandler(service *service.OrderCreatorService) *Handler {
 	return &Handler{Service: service}
 }
 
@@ -56,25 +56,25 @@ func (h *Handler) CreateUser(e echo.Context) error {
 	}
 	return e.JSON(http.StatusCreated, createdUser)
 }
+
 func (h *Handler) AddBalance(e echo.Context) error {
 	var balance dto.BalanceDto
 	balance.Id = e.Param("id")
 	balance.Asset = e.Param("asset")
-
 	userID, err := uuid.Parse(balance.Id)
 	if err != nil {
 		return e.JSON(http.StatusBadRequest, "Invalid user ID")
 	}
 	balance.Id = userID.String()
-
 	if err := e.Bind(&balance); err != nil {
 		return e.JSON(http.StatusBadRequest, err.Error())
 	}
 	if err := h.Service.AddBalance(balance); err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
-	return e.JSON(http.StatusOK, "balance updated successfully")
+	return e.JSON(http.StatusOK, "Balance updated successfully")
 }
+
 func (h *Handler) GetBalance(e echo.Context) error {
 	id := e.Param("id")
 	balance, err := h.Service.GetBalance(id)

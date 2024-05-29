@@ -10,37 +10,27 @@ import (
 	"time"
 )
 
-type DBConn struct {
-	Pool *sql.DB
-}
+func NewDBConnection(config *Config) (*sql.DB, *gorm.DB, error) {
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
+		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode, config.TimeZone)
 
-func NewDBConnection(config *Config) (*gorm.DB, error) {
-	connStr := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s search_path=public",
-		config.Host, config.User, config.Password, config.DBName, config.Port, config.SSLMode, config.TimeZone)
-	db, err := gorm.Open(postgres.Open(connStr), &gorm.Config{})
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to database: %w", err)
+		return nil, nil, fmt.Errorf("error connecting to database: %w", err)
 	}
-	sqlDB, err := db.DB()
+	gormDB, err := gorm.Open(postgres.Open(connStr), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("database connection could not be obtained: %w", err)
+		return nil, nil, fmt.Errorf("error connecting to database: %w", err)
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("database connection could not be obtained: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	log.Println("successfully connected to the database !!")
-
-	return db, nil
-}
-
-func (d *DBConn) GetConnection() (*sql.DB, error) {
-	if err := d.Pool.Ping(); err != nil {
-		return nil, fmt.Errorf("database connection closed, reconnecting: %w", err)
-	}
-	return d.Pool, nil
-}
-func (d *DBConn) Close() error {
-	return d.Pool.Close()
+	log.Println("successfully connected to the database!!")
+	return db, gormDB, nil
 }

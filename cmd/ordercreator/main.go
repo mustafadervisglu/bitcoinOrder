@@ -26,26 +26,24 @@ func main() {
 		TimeZone: "UTC",
 	}
 
-	db, err := database.NewDBConnection(dbConfig)
+	db, gormDB, err := database.NewDBConnection(dbConfig)
 	if err != nil {
 		log.Fatalf("could not connect to database: %v", err)
 	}
-	defer func() {
-		sqlDB, _ := db.DB()
-		sqlDB.Close()
-	}()
+	defer db.Close()
+
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	err = db.AutoMigrate(&entity.Order{}, &entity.OrderMatch{}, &entity.Users{})
+	err = gormDB.AutoMigrate(&entity.Order{}, &entity.OrderMatch{}, &entity.Users{})
 	if err != nil {
 		log.Fatalf("An error occurred while creating tables: %v", err)
 	}
 
-	orderRepo := repository.NewOrderRepository(db)
-	userRepo := repository.NewUserRepository(db)
-	orderService := service.NewOrderCreatorService(orderRepo, userRepo, db)
+	orderRepo := repository.NewOrderRepository(gormDB, db)
+	userRepo := repository.NewUserRepository(gormDB, db)
+	orderService := service.NewOrderCreatorService(orderRepo, userRepo, gormDB, db)
 	orderHandler := controller.NewOrderCreatorHandler(orderService)
 	orderHandler.RegisterRoutes(e)
 	log.Fatal(e.Start(":8080"))

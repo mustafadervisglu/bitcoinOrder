@@ -19,17 +19,18 @@ func main() {
 		TimeZone: "UTC",
 	}
 
-	db, err := database.NewDBConnection(dbConfig)
+	sqlDB, gormDB, err := database.NewDBConnection(dbConfig)
 	if err != nil {
 		log.Fatalf("could not connect to database: %v", err)
 	}
+	defer sqlDB.Close()
 	defer func() {
-		sqlDB, _ := db.DB()
+		sqlDB, _ := gormDB.DB()
 		sqlDB.Close()
 	}()
 
-	transactionRepo := repository.NewTransactionRepository(db)
-	transactionService := service.NewOrderCheckerService(transactionRepo, db)
+	transactionRepo := repository.NewTransactionRepository(gormDB)
+	transactionService := service.NewOrderCheckerService(transactionRepo, gormDB)
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
