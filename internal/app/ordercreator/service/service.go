@@ -17,14 +17,16 @@ import (
 type OrderCreatorService struct {
 	orderRepo repository.IOrderRepository
 	userRepo  repository.IUserRepository
+	lockRepo  repository.ILockRepository
 	gormDB    *gorm.DB
 	db        *sql.DB
 }
 
-func NewOrderCreatorService(orderRepo repository.IOrderRepository, userRepo repository.IUserRepository, gormDB *gorm.DB, db *sql.DB) *OrderCreatorService {
+func NewOrderCreatorService(orderRepo repository.IOrderRepository, userRepo repository.IUserRepository, lockRepo repository.ILockRepository, gormDB *gorm.DB, db *sql.DB) *OrderCreatorService {
 	return &OrderCreatorService{
 		orderRepo: orderRepo,
 		userRepo:  userRepo,
+		lockRepo:  lockRepo,
 		gormDB:    gormDB,
 		db:        db,
 	}
@@ -82,6 +84,19 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
+	switch newOrder.Type {
+	case "buy":
+		if err := s.lockUSDTForBuyOrder(dbTx, user, newOrder.OrderPrice*newOrder.OrderQuantity); err != nil {
+			return fmt.Errorf("failed to lock USDT for buy order: %w", err)
+		}
+	case "sell":
+		if err := s.lockBTCForSellOrder(dbTx, user, newOrder.OrderQuantity); err != nil {
+			return fmt.Errorf("failed to lock BTC for sell order: %w", err)
+		}
+	default:
+		return fmt.Errorf("invalid order type: %s", newOrder.Type)
+	}
+
 	openOrders, err := s.orderRepo.FindOpenOrdersByUser(s.db, newOrder.UserID)
 	if err != nil {
 		return fmt.Errorf("open orders not found %w", err)
@@ -99,9 +114,6 @@ func (s *OrderCreatorService) CreateOrder(newOrder dto.OrderDto) error {
 		if err != nil {
 			return fmt.Errorf("could not create new order: %w", err)
 		}
-	}
-	if err := s.userRepo.UpdateUser(s.db, user); err != nil {
-		return fmt.Errorf("failed to update user balance: %w", err)
 	}
 
 	return nil
@@ -192,6 +204,56 @@ func (s *OrderCreatorService) createNewOrder(tx *sql.DB, user entity.Users, open
 
 	return nil
 
+}
+
+func (s *OrderCreatorService) lockUSDTForBuyOrder(tx *sql.Tx, user entity.Users, amount float64) error {
+	currentUSDTBalance, err := s.lockRepo.GetUserBalance(tx, user.ID, "USDT")
+	if err != nil {
+		return fmt.Errorf("failed to get USDT balance: %w", err)
+	}
+
+	if currentUSDTBalance >= amount {
+		if err := s.lockRepo.DecreaseUserBalance(tx, user.ID, "USDT", amount); err != nil {
+			return fmt.Errorf("failed to decrease USDT balance: %w", err)
+		}
+
+		newLock := entity.Lock{
+			UserID: user.ID,
+			Asset:  "USDT",
+			Amount: amount,
+		}
+		if err := s.lockRepo.CreateLock(tx, newLock); err != nil {
+			return fmt.Errorf("failed to create lock: %w", err)
+		}
+		return nil
+	} else {
+		return fmt.Errorf("insufficient USDT balance: %v", user.ID)
+	}
+}
+
+func (s *OrderCreatorService) lockBTCForSellOrder(tx *sql.Tx, user entity.Users, amount float64) error {
+	currentBTCBalance, err := s.lockRepo.GetUserBalance(tx, user.ID, "BTC")
+	if err != nil {
+		return fmt.Errorf("failed to get BTC balance: %w", err)
+	}
+
+	if currentBTCBalance >= amount {
+		if err := s.lockRepo.DecreaseUserBalance(tx, user.ID, "BTC", amount); err != nil {
+			return fmt.Errorf("failed to decrease BTC balance: %w", err)
+		}
+
+		newLock := entity.Lock{
+			UserID: user.ID,
+			Asset:  "BTC",
+			Amount: amount,
+		}
+		if err := s.lockRepo.CreateLock(tx, newLock); err != nil {
+			return fmt.Errorf("failed to create lock: %w", err)
+		}
+		return nil
+	} else {
+		return fmt.Errorf("insufficient BTC balance: %v", user.ID)
+	}
 }
 
 func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, error) {

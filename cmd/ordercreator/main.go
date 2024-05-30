@@ -36,14 +36,15 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	err = gormDB.AutoMigrate(&entity.Order{}, &entity.OrderMatch{}, &entity.Users{})
+	err = gormDB.AutoMigrate(&entity.Order{}, &entity.OrderMatch{}, &entity.Users{}, &entity.Lock{})
 	if err != nil {
 		log.Fatalf("An error occurred while creating tables: %v", err)
 	}
 
 	orderRepo := repository.NewOrderRepository(gormDB, db)
 	userRepo := repository.NewUserRepository(gormDB, db)
-	orderService := service.NewOrderCreatorService(orderRepo, userRepo, gormDB, db)
+	lockRepo := repository.NewLockRepository(db)
+	orderService := service.NewOrderCreatorService(orderRepo, userRepo, lockRepo, gormDB, db)
 	orderHandler := controller.NewOrderCreatorHandler(orderService)
 	orderHandler.RegisterRoutes(e)
 	log.Fatal(e.Start(":8080"))

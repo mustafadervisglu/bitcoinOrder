@@ -29,8 +29,9 @@ func main() {
 		sqlDB.Close()
 	}()
 
-	transactionRepo := repository.NewTransactionRepository(gormDB)
-	transactionService := service.NewOrderCheckerService(transactionRepo, gormDB)
+	transactionRepo := repository.NewTransactionRepository(sqlDB)
+	lockRepo := repository.NewLockRepository(sqlDB)
+	transactionService := service.NewOrderCheckerService(transactionRepo, lockRepo, sqlDB)
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
