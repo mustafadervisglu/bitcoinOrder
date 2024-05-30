@@ -62,7 +62,6 @@ func (r *UserRepository) FindUser(tx *sql.DB, id string) (entity.Users, error) {
         SELECT id, email, btc_balance, usdt_balance, created_at, updated_at, deleted_at
         FROM "users" WHERE id = $1;
     `
-	// Sütun sıralamasını ve tiplerini Users struct'ına göre ayarlayın
 	err := tx.QueryRowContext(context.Background(), sqlStatement, id).
 		Scan(&user.ID, &user.Email, &user.BtcBalance, &user.UsdtBalance,
 			&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt)

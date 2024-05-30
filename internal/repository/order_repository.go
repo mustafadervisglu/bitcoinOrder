@@ -33,7 +33,6 @@ func NewOrderRepository(gormDB *gorm.DB, db *sql.DB) *OrderRepository {
 }
 
 func (o *OrderRepository) CreateOrder(tx *sql.DB, newOrder entity.Order) (entity.Order, error) {
-	// Raw SQL sorgusu ile sipariş oluştur
 	userIDStr := newOrder.UserID.String()
 	var sqlStatement = `
         INSERT INTO orders (id, user_id, type, order_quantity, order_price, order_status, created_at)
@@ -89,8 +88,8 @@ func (o *OrderRepository) FindOpenBuyOrders() ([]entity.Order, error) {
 }
 
 func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID string) ([]entity.Order, error) {
-	// Raw SQL Sorgusu
 	sqlStatement := `
+
         SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
         FROM orders
         WHERE user_id = $1 AND deleted_at IS NULL AND order_status = true; 
@@ -122,7 +121,6 @@ func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID string) ([]ent
 }
 
 func (o *OrderRepository) FindAllOrders(tx *sql.DB) ([]entity.Order, error) {
-	// Raw SQL Sorgusu
 	sqlStatement := `
         SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
         FROM orders
