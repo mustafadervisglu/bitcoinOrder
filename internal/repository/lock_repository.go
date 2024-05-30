@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bitcoinOrder/internal/domain/entity"
 	"context"
 	"database/sql"
 	"fmt"
@@ -8,10 +9,13 @@ import (
 )
 
 type ILockRepository interface {
-	LockUSDT(tx *sql.DB, userID uuid.UUID, amount float64) error
-	LockBTC(tx *sql.DB, userID uuid.UUID, amount float64) error
-	UnlockUSDT(tx *sql.DB, userID uuid.UUID, amount float64) error
-	UnlockBTC(tx *sql.DB, userID uuid.UUID, amount float64) error
+	GetUserBalance(tx *sql.Tx, userID uuid.UUID, asset string) (float64, error)
+	DecreaseUserBalance(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error
+	CreateLock(tx *sql.Tx, lock entity.Lock) error
+	GetLockedAmount(tx *sql.Tx, userID uuid.UUID, asset string) (float64, error)
+	IncreaseUserBalance(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error
+	DeleteLock(tx *sql.Tx, userID uuid.UUID, asset string) error
+	UpdateLockAmount(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error
 }
 
 type LockRepository struct {
@@ -22,79 +26,77 @@ type LockRepository struct {
 func NewLockRepository(db *sql.DB) *LockRepository {
 	return &LockRepository{db: db}
 }
-
-func (r *LockRepository) LockUSDT(tx *sql.DB, userID uuid.UUID, amount float64) error {
-
-	sqlStatement := `
-        UPDATE users
-        SET usdt_balance = usdt_balance - $1
-        WHERE id = $2 AND usdt_balance >= $1; 
-    `
-	result, err := tx.ExecContext(context.Background(), sqlStatement, amount, userID)
+func (r *LockRepository) GetUserBalance(tx *sql.Tx, userID uuid.UUID, asset string) (float64, error) {
+	var balance float64
+	sqlStatement := fmt.Sprintf("SELECT %s_balance FROM users WHERE id = $1", asset)
+	err := tx.QueryRowContext(context.Background(), sqlStatement, userID).Scan(&balance)
 	if err != nil {
-		return fmt.Errorf("error while locking USDT: %w", err)
+		return 0, fmt.Errorf("error while getting %s balance: %w", asset, err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("could not get number of affected rows: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("insufficient USDT balance: %v", userID)
-	}
-
-	return nil
+	return balance, nil
 }
 
-func (r *LockRepository) LockBTC(tx *sql.DB, userID uuid.UUID, amount float64) error {
-
-	sqlStatement := `
+func (r *LockRepository) DecreaseUserBalance(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error {
+	sqlStatement := fmt.Sprintf(`
         UPDATE users
-        SET btc_balance = btc_balance - $1
-        WHERE id = $2 AND btc_balance >= $1;
-    `
-	result, err := tx.ExecContext(context.Background(), sqlStatement, amount, userID)
-	if err != nil {
-		return fmt.Errorf("error while locking BTC: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("could not get number of affected rows:c %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("insufficient BTC balance: %v", userID)
-	}
-
-	return nil
-}
-
-func (r *LockRepository) UnlockUSDT(tx *sql.DB, userID uuid.UUID, amount float64) error {
-
-	sqlStatement := `
-        UPDATE users
-        SET usdt_balance = usdt_balance + $1
-        WHERE id = $2; 
-    `
+        SET %s_balance = %s_balance - $1
+        WHERE id = $2;
+    `, asset, asset)
 	_, err := tx.ExecContext(context.Background(), sqlStatement, amount, userID)
 	if err != nil {
-		return fmt.Errorf("error while removing USDT lock: %w", err)
+		return fmt.Errorf("error while decreasing %s balance: %w", asset, err)
 	}
 	return nil
 }
 
-func (r *LockRepository) UnlockBTC(tx *sql.DB, userID uuid.UUID, amount float64) error {
+func (r *LockRepository) CreateLock(tx *sql.Tx, lock entity.Lock) error {
+	err := tx.QueryRowContext(context.Background(),
+		"INSERT INTO locks (user_id, asset, amount) VALUES ($1, $2, $3) RETURNING id",
+		lock.UserID, lock.Asset, lock.Amount).Scan(&lock.ID)
+	if err != nil {
+		return fmt.Errorf("error while creating lock: %w", err)
+	}
+	return nil
+}
 
-	sqlStatement := `
+func (r *LockRepository) GetLockedAmount(tx *sql.Tx, userID uuid.UUID, asset string) (float64, error) {
+	var lockedAmount float64
+	err := tx.QueryRowContext(context.Background(),
+		"SELECT SUM(amount) FROM locks WHERE user_id = $1 AND asset = $2", userID, asset).Scan(&lockedAmount)
+	if err != nil {
+		return 0, fmt.Errorf("error while getting locked %s balance: %w", asset, err)
+	}
+	return lockedAmount, nil
+}
+
+func (r *LockRepository) IncreaseUserBalance(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error {
+	sqlStatement := fmt.Sprintf(`
         UPDATE users
-        SET btc_balance = btc_balance + $1
-        WHERE id = $2; 
-    `
+        SET %s_balance = %s_balance + $1 
+        WHERE id = $2;
+    `, asset, asset)
 	_, err := tx.ExecContext(context.Background(), sqlStatement, amount, userID)
 	if err != nil {
-		return fmt.Errorf("error while removing BTC lock: %w", err)
+		return fmt.Errorf("error while increasing %s balance: %w", asset, err)
+	}
+	return nil
+}
+
+func (r *LockRepository) DeleteLock(tx *sql.Tx, userID uuid.UUID, asset string) error {
+	_, err := tx.ExecContext(context.Background(),
+		"DELETE FROM locks WHERE user_id = $1 AND asset = $2", userID, asset)
+	if err != nil {
+		return fmt.Errorf("error while deleting lock: %w", err)
+	}
+	return nil
+}
+
+func (r *LockRepository) UpdateLockAmount(tx *sql.Tx, userID uuid.UUID, asset string, amount float64) error {
+	_, err := tx.ExecContext(context.Background(),
+		"UPDATE locks SET amount = amount - $1 WHERE user_id = $2 AND asset = $3",
+		amount, userID, asset)
+	if err != nil {
+		return fmt.Errorf("error while updating locked %s balance: %w", asset, err)
 	}
 	return nil
 }
