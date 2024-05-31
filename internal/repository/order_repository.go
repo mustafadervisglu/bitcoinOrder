@@ -82,7 +82,7 @@ func (o *OrderRepository) SoftDeleteOrder(ctx context.Context, orderID uuid.UUID
     `
 	_, err = tx.ExecContext(ctx, sqlStatement, orderID)
 	if err != nil {
-		return fmt.Errorf("failed to soft delete order with ID %s: %w", orderID, err) // Daha spesifik hata mesajı
+		return fmt.Errorf("failed to soft delete order with ID %s: %w", orderID, err)
 	}
 	return nil
 }
@@ -110,7 +110,7 @@ func (o *OrderRepository) FindOpenBuyOrders() ([]entity.Order, error) {
 	return o.fetchOrders(ctx, sqlStatement)
 }
 
-func (o *OrderRepository) FindOpenOrdersByUser(ctx context.Context, userID uuid.UUID) ([]entity.Order, error) { // userID'yi UUID olarak al
+func (o *OrderRepository) FindOpenOrdersByUser(ctx context.Context, userID uuid.UUID) ([]entity.Order, error) {
 	sqlStatement := `
         SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
         FROM orders
