@@ -113,12 +113,11 @@ func (o *TransactionRepository) SaveMatches(tx *sql.Tx, orderMatches []entity.Or
 			sqlStatement += ","
 		}
 		sqlStatement += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)",
-			i*5+1, i*5+2, i*5+3, i*5+4, i*5+5) // Parametre yer tutucuları kullan
-
+			i*5+1, i*5+2, i*5+3, i*5+4, i*5+5)
 		params = append(params, match.ID, match.OrderID1, match.OrderID2, match.OrderQuantity, match.MatchedAt)
 	}
 
-	_, err := tx.ExecContext(context.Background(), sqlStatement, params...) // Parametreleri ilet
+	_, err := tx.ExecContext(context.Background(), sqlStatement, params...)
 	if err != nil {
 		return fmt.Errorf("an error occurred while saving order matches: %w", err)
 	}
@@ -144,9 +143,9 @@ func (o *TransactionRepository) UpdateBalance(tx *sql.Tx, users []*entity.Users)
 	var params []interface{}
 
 	for i, user := range users {
-		usdtBalanceCases += fmt.Sprintf("WHEN $%d THEN $%d ", i*2+1, i*2+2) // Parametre yer tutucuları
+		usdtBalanceCases += fmt.Sprintf("WHEN $%d THEN $%d ", i*2+1, i*2+2)
 		btcBalanceCases += fmt.Sprintf("WHEN $%d THEN $%d ", i*2+1, i*2+3)
-		params = append(params, user.ID, *user.UsdtBalance, *user.BtcBalance) // Parametreleri ekle
+		params = append(params, user.ID, *user.UsdtBalance, *user.BtcBalance)
 
 		if i > 0 {
 			userIDs += ", "
@@ -155,7 +154,7 @@ func (o *TransactionRepository) UpdateBalance(tx *sql.Tx, users []*entity.Users)
 	}
 
 	finalStatement := fmt.Sprintf(sqlStatement, usdtBalanceCases, btcBalanceCases, userIDs)
-	_, err := tx.ExecContext(context.Background(), finalStatement, params...) // Parametreleri ilet
+	_, err := tx.ExecContext(context.Background(), finalStatement, params...)
 	if err != nil {
 		return fmt.Errorf("an error occurred while updating user balances: %w", err)
 	}

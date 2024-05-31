@@ -60,64 +60,46 @@ func (o *OrderRepository) UpdateOrder(tx *sql.DB, order entity.Order) error {
 	return nil
 }
 
-func (o *OrderRepository) SoftDeleteOrder(orderId string) error {
-	if err := o.gormDB.Model(&entity.Order{}).Where("id = ?", orderId).Update("deleted_at", time.Now()).Error; err != nil {
-		return err
+func (o *OrderRepository) SoftDeleteOrder(orderId uuid.UUID) error {
+	sqlStatement := `
+        UPDATE orders
+        SET deleted_at = NOW()
+        WHERE id = $1;
+    `
+	_, err := o.db.ExecContext(context.Background(), sqlStatement, orderId)
+	if err != nil {
+		return fmt.Errorf("an error occurred while soft deleting the order: %w", err)
 	}
 	return nil
 }
 
 func (o *OrderRepository) FindOpenSellOrders() ([]entity.Order, error) {
-	var sellOrders []entity.Order
-	if err := o.gormDB.Where("deleted_at IS NULL AND type = ?", "sell").
-		Order("created_at ASC").
-		Find(&sellOrders).Error; err != nil {
-		return nil, err
-	}
-	return sellOrders, nil
+	sqlStatement := `
+        SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
+        FROM orders
+        WHERE deleted_at IS NULL AND type = 'sell'
+        ORDER BY created_at ASC;
+    `
+	return o.fetchOrders(o.db, sqlStatement)
 }
 
 func (o *OrderRepository) FindOpenBuyOrders() ([]entity.Order, error) {
-	var buyOrders []entity.Order
-	if err := o.gormDB.Where("deleted_at IS NULL AND type = ? ", "buy").
-		Order("created_at DESC").
-		Find(&buyOrders).Error; err != nil {
-		return nil, err
-	}
-	return buyOrders, nil
+	sqlStatement := `
+        SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
+        FROM orders
+        WHERE deleted_at IS NULL AND type = 'buy' 
+        ORDER BY created_at DESC;
+    `
+	return o.fetchOrders(o.db, sqlStatement)
 }
 
-func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID string) ([]entity.Order, error) {
+func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID uuid.UUID) ([]entity.Order, error) {
 	sqlStatement := `
-
         SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
         FROM orders
         WHERE user_id = $1 AND deleted_at IS NULL AND order_status = true; 
     `
-
-	rows, err := tx.QueryContext(context.Background(), sqlStatement, userID)
-	if err != nil {
-		return nil, fmt.Errorf("an error occurred while retrieving orders: %w", err)
-	}
-	defer rows.Close()
-
-	var orders []entity.Order
-	for rows.Next() {
-		var order entity.Order
-		var userIDStr string
-		err := rows.Scan(&order.ID, &userIDStr, &order.Type, &order.OrderQuantity, &order.OrderPrice, &order.OrderStatus, &order.CreatedAt, &order.CompletedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error while scanning row: %w", err)
-		}
-		order.UserID, err = uuid.Parse(userIDStr)
-		if err != nil {
-			return nil, fmt.Errorf("wrong user id format: %w", err)
-		}
-
-		orders = append(orders, order)
-	}
-
-	return orders, nil
+	return o.fetchOrders(tx, sqlStatement, userID)
 }
 
 func (o *OrderRepository) FindAllOrders(tx *sql.DB) ([]entity.Order, error) {
@@ -126,17 +108,15 @@ func (o *OrderRepository) FindAllOrders(tx *sql.DB) ([]entity.Order, error) {
         FROM orders
         WHERE deleted_at IS NULL;
     `
+	return o.fetchOrders(tx, sqlStatement)
+}
 
-	rows, err := tx.QueryContext(context.Background(), sqlStatement)
+func (o *OrderRepository) fetchOrders(tx *sql.DB, sqlStatement string, args ...interface{}) ([]entity.Order, error) {
+	rows, err := tx.QueryContext(context.Background(), sqlStatement, args...)
 	if err != nil {
-		return nil, fmt.Errorf("an error occurred while receiving orders: %w", err)
+		return nil, fmt.Errorf("an error occurred while retrieving orders: %w", err)
 	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			return
-		}
-	}(rows)
+	defer rows.Close()
 
 	var orders []entity.Order
 	for rows.Next() {
