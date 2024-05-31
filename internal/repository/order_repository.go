@@ -162,6 +162,6 @@ func (o *OrderRepository) fetchOrders(ctx context.Context, sqlStatement string, 
 
 		return orders, nil
 	} else {
-		return nil, fmt.Errorf("an error occurred while retrieving orders: rows is nil") // Daha açıklayıcı bir hata mesajı
+		return nil, fmt.Errorf("rows nil")
 	}
 }
