@@ -60,7 +60,7 @@ func (o *OrderRepository) UpdateOrder(tx *sql.DB, order entity.Order) error {
 	return nil
 }
 
-func (o *OrderRepository) SoftDeleteOrder(orderId uuid.UUID) error {
+func (o *OrderRepository) SoftDeleteOrder(orderId string) error {
 	sqlStatement := `
         UPDATE orders
         SET deleted_at = NOW()
@@ -93,7 +93,7 @@ func (o *OrderRepository) FindOpenBuyOrders() ([]entity.Order, error) {
 	return o.fetchOrders(o.db, sqlStatement)
 }
 
-func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID uuid.UUID) ([]entity.Order, error) {
+func (o *OrderRepository) FindOpenOrdersByUser(tx *sql.DB, userID string) ([]entity.Order, error) {
 	sqlStatement := `
         SELECT id, user_id, type, order_quantity, order_price, order_status, created_at, completed_at 
         FROM orders
