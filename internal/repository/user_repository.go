@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/labstack/gommon/email"
 	"gorm.io/gorm"
 	"time"
@@ -14,11 +15,11 @@ import (
 
 type IUserRepository interface {
 	CreateUser(user entity.Users) (entity.Users, error)
-	UpdateUser(tx *sql.DB, user entity.Users) error
+	UpdateUser(ctx context.Context, user entity.Users) error
 	GetBalance(id string) (entity.Users, error)
-	FindUser(tx *sql.DB, id string) (entity.Users, error)
+	FindUser(ctx context.Context, id uuid.UUID) (entity.Users, error)
 	FindUserByEmail(email email.Email) (entity.Users, error)
-	FindAllUser(tx *sql.DB) ([]entity.Users, error)
+	FindAllUser(ctx context.Context) ([]entity.Users, error)
 }
 
 type UserRepository struct {
@@ -56,13 +57,18 @@ func (r *UserRepository) FindUserByEmail(email email.Email) (entity.Users, error
 	return existingUser, nil
 }
 
-func (r *UserRepository) FindUser(tx *sql.DB, id string) (entity.Users, error) {
+func (r *UserRepository) FindUser(ctx context.Context, id uuid.UUID) (entity.Users, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return entity.Users{}, err
+	}
+
 	var user entity.Users
 	sqlStatement := `
         SELECT id, email, btc_balance, usdt_balance, created_at, updated_at, deleted_at
         FROM "users" WHERE id = $1;
     `
-	err := tx.QueryRowContext(context.Background(), sqlStatement, id).
+	err = tx.QueryRowContext(ctx, sqlStatement, id).
 		Scan(&user.ID, &user.Email, &user.BtcBalance, &user.UsdtBalance,
 			&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt)
 	if err != nil {
@@ -71,32 +77,45 @@ func (r *UserRepository) FindUser(tx *sql.DB, id string) (entity.Users, error) {
 	return user, nil
 }
 
-func (r *UserRepository) UpdateUser(tx *sql.DB, user entity.Users) error {
+func (r *UserRepository) UpdateUser(ctx context.Context, user entity.Users) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	var usdtBalance, btcBalance sql.NullFloat64
+	if user.UsdtBalance != nil {
+		usdtBalance.Float64 = *user.UsdtBalance
+		usdtBalance.Valid = true
+	}
+	if user.BtcBalance != nil {
+		btcBalance.Float64 = *user.BtcBalance
+		btcBalance.Valid = true
+	}
+
 	sqlStatement := `
         UPDATE users
         SET usdt_balance = $1, btc_balance = $2, updated_at = $3
         WHERE id = $4;
     `
-	var usdtBalance, btcBalance interface{}
-	if user.UsdtBalance != nil {
-		usdtBalance = *user.UsdtBalance
-	}
-	if user.BtcBalance != nil {
-		btcBalance = *user.BtcBalance
-	}
 	updateTime := time.Now()
-	_, err := tx.ExecContext(context.Background(), sqlStatement, usdtBalance, btcBalance, updateTime, user.ID)
+	_, err = tx.ExecContext(ctx, sqlStatement, usdtBalance, btcBalance, updateTime, user.ID)
 	if err != nil {
 		return fmt.Errorf("error updating user: %w", err)
 	}
 	return nil
 }
 
-func (r *UserRepository) FindAllUser(tx *sql.DB) ([]entity.Users, error) {
+func (r *UserRepository) FindAllUser(ctx context.Context) ([]entity.Users, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlStatement := `
         SELECT * FROM users;
     `
-	rows, err := tx.QueryContext(context.Background(), sqlStatement)
+	rows, err := tx.QueryContext(ctx, sqlStatement)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching users: %w", err)
 	}

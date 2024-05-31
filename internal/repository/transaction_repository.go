@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bitcoinOrder/internal/domain/entity"
+	"bitcoinOrder/pkg/utils"
 	"context"
 	"database/sql"
 	"errors"
@@ -11,16 +12,16 @@ import (
 )
 
 type ITransactionRepository interface {
-	FindSellOrders(db *sql.Tx) ([]entity.Order, error)
-	FindBuyOrders(db *sql.Tx) ([]entity.Order, error)
-	SaveMatches(db *sql.Tx, orderMatches []entity.OrderMatch) error
-	UpdateBalance(db *sql.Tx, users []*entity.Users) error
-	FindOrderById(db *sql.Tx, orderId uuid.UUID) (entity.Order, error)
-	FindUserById(db *sql.Tx, userId uuid.UUID) (*entity.Users, error)
-	SoftDeleteOrder(db *sql.Tx, orderId uuid.UUID) error
-	UpdateOrders(db *sql.Tx, orders []*entity.Order) error
-	SoftDeleteMatch(db *sql.Tx, matchID uuid.UUID) error
-	FetchMatch(db *sql.Tx, orderID1 uuid.UUID, orderID2 uuid.UUID) (*entity.OrderMatch, error)
+	FindSellOrders(ctx context.Context) ([]entity.Order, error)
+	FindBuyOrders(ctx context.Context) ([]entity.Order, error)
+	SaveMatches(ctx context.Context, orderMatches []entity.OrderMatch) error
+	UpdateBalance(ctx context.Context, users []*entity.Users) error
+	FindOrderById(ctx context.Context, orderId uuid.UUID) (entity.Order, error)
+	FindUserById(ctx context.Context, userId uuid.UUID) (*entity.Users, error)
+	SoftDeleteOrder(ctx context.Context, orderId uuid.UUID) error
+	UpdateOrders(ctx context.Context, orders []*entity.Order) error
+	SoftDeleteMatch(ctx context.Context, matchID uuid.UUID) error
+	FetchMatch(ctx context.Context, orderID1 uuid.UUID, orderID2 uuid.UUID) (*entity.OrderMatch, error)
 }
 
 type TransactionRepository struct {
@@ -34,7 +35,12 @@ func NewTransactionRepository(db *sql.DB) ITransactionRepository {
 	}
 }
 
-func (o *TransactionRepository) FindBuyOrders(tx *sql.Tx) ([]entity.Order, error) {
+func (o *TransactionRepository) FindBuyOrders(ctx context.Context) ([]entity.Order, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlStatement := `
         SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
                u.usdt_balance, u.btc_balance
@@ -47,7 +53,12 @@ func (o *TransactionRepository) FindBuyOrders(tx *sql.Tx) ([]entity.Order, error
 	return o.scanOrders(tx, sqlStatement)
 }
 
-func (o *TransactionRepository) FindSellOrders(tx *sql.Tx) ([]entity.Order, error) {
+func (o *TransactionRepository) FindSellOrders(ctx context.Context) ([]entity.Order, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlStatement := `
         SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
                u.usdt_balance, u.btc_balance
@@ -97,7 +108,12 @@ func (o *TransactionRepository) scanOrders(tx *sql.Tx, sqlStatement string) ([]e
 	return orders, nil
 }
 
-func (o *TransactionRepository) SaveMatches(tx *sql.Tx, orderMatches []entity.OrderMatch) error {
+func (o *TransactionRepository) SaveMatches(ctx context.Context, orderMatches []entity.OrderMatch) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	if len(orderMatches) == 0 {
 		return nil
 	}
@@ -117,7 +133,7 @@ func (o *TransactionRepository) SaveMatches(tx *sql.Tx, orderMatches []entity.Or
 		params = append(params, match.ID, match.OrderID1, match.OrderID2, match.OrderQuantity, match.MatchedAt)
 	}
 
-	_, err := tx.ExecContext(context.Background(), sqlStatement, params...)
+	_, err = tx.ExecContext(ctx, sqlStatement, params...)
 	if err != nil {
 		return fmt.Errorf("an error occurred while saving order matches: %w", err)
 	}
@@ -125,7 +141,12 @@ func (o *TransactionRepository) SaveMatches(tx *sql.Tx, orderMatches []entity.Or
 	return nil
 }
 
-func (o *TransactionRepository) UpdateBalance(tx *sql.Tx, users []*entity.Users) error {
+func (o *TransactionRepository) UpdateBalance(ctx context.Context, users []*entity.Users) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	sqlStatement := `
         UPDATE users
         SET usdt_balance = CASE id 
@@ -143,18 +164,18 @@ func (o *TransactionRepository) UpdateBalance(tx *sql.Tx, users []*entity.Users)
 	var params []interface{}
 
 	for i, user := range users {
-		usdtBalanceCases += fmt.Sprintf("WHEN $%d THEN $%d ", i*2+1, i*2+2)
-		btcBalanceCases += fmt.Sprintf("WHEN $%d THEN $%d ", i*2+1, i*2+3)
+		usdtBalanceCases += fmt.Sprintf("WHEN '%v' THEN $%d::float ", user.ID, i*3+2)
+		btcBalanceCases += fmt.Sprintf("WHEN '%v' THEN $%d::float ", user.ID, i*3+3)
 		params = append(params, user.ID, *user.UsdtBalance, *user.BtcBalance)
 
 		if i > 0 {
 			userIDs += ", "
 		}
-		userIDs += fmt.Sprintf("$%d", i*2+1)
+		userIDs += fmt.Sprintf("$%d", i*3+1)
 	}
-
+	log.Println("test user ID", userIDs)
 	finalStatement := fmt.Sprintf(sqlStatement, usdtBalanceCases, btcBalanceCases, userIDs)
-	_, err := tx.ExecContext(context.Background(), finalStatement, params...)
+	_, err = tx.ExecContext(ctx, finalStatement, params...)
 	if err != nil {
 		return fmt.Errorf("an error occurred while updating user balances: %w", err)
 	}
@@ -162,7 +183,12 @@ func (o *TransactionRepository) UpdateBalance(tx *sql.Tx, users []*entity.Users)
 	return nil
 }
 
-func (o *TransactionRepository) FindOrderById(tx *sql.Tx, orderID uuid.UUID) (entity.Order, error) {
+func (o *TransactionRepository) FindOrderById(ctx context.Context, orderID uuid.UUID) (entity.Order, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return entity.Order{}, err
+	}
+
 	sqlStatement := `
         SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
                u.usdt_balance, u.btc_balance
@@ -173,7 +199,7 @@ func (o *TransactionRepository) FindOrderById(tx *sql.Tx, orderID uuid.UUID) (en
 
 	var order entity.Order
 	var userIDStr string
-	err := tx.QueryRowContext(context.Background(), sqlStatement, orderID).Scan(
+	err = tx.QueryRowContext(ctx, sqlStatement, orderID).Scan(
 		&order.ID,
 		&userIDStr,
 		&order.Type,
@@ -198,7 +224,12 @@ func (o *TransactionRepository) FindOrderById(tx *sql.Tx, orderID uuid.UUID) (en
 	return order, nil
 }
 
-func (o *TransactionRepository) FindUserById(tx *sql.Tx, userID uuid.UUID) (*entity.Users, error) {
+func (o *TransactionRepository) FindUserById(ctx context.Context, userID uuid.UUID) (*entity.Users, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlStatement := `
         SELECT id, usdt_balance, btc_balance
         FROM users
@@ -206,7 +237,7 @@ func (o *TransactionRepository) FindUserById(tx *sql.Tx, userID uuid.UUID) (*ent
     `
 
 	var user entity.Users
-	err := tx.QueryRowContext(context.Background(), sqlStatement, userID).Scan(
+	err = tx.QueryRowContext(ctx, sqlStatement, userID).Scan(
 		&user.ID,
 		&user.UsdtBalance,
 		&user.BtcBalance,
@@ -221,14 +252,19 @@ func (o *TransactionRepository) FindUserById(tx *sql.Tx, userID uuid.UUID) (*ent
 	return &user, nil
 }
 
-func (o *TransactionRepository) SoftDeleteOrder(tx *sql.Tx, orderID uuid.UUID) error {
+func (o *TransactionRepository) SoftDeleteOrder(ctx context.Context, orderID uuid.UUID) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	sqlStatement := `
         UPDATE orders
         SET deleted_at = NOW()
         WHERE id = $1;
     `
 
-	_, err := tx.ExecContext(context.Background(), sqlStatement, orderID)
+	_, err = tx.ExecContext(ctx, sqlStatement, orderID)
 	if err != nil {
 		return fmt.Errorf("an error occurred while soft deleting the order: %w", err)
 	}
@@ -236,7 +272,12 @@ func (o *TransactionRepository) SoftDeleteOrder(tx *sql.Tx, orderID uuid.UUID) e
 	return nil
 }
 
-func (o *TransactionRepository) UpdateOrders(tx *sql.Tx, orders []*entity.Order) error {
+func (o *TransactionRepository) UpdateOrders(ctx context.Context, orders []*entity.Order) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	sqlStatement := `
     UPDATE orders 
     SET order_quantity = CASE id %s END, 
@@ -269,27 +310,37 @@ func (o *TransactionRepository) UpdateOrders(tx *sql.Tx, orders []*entity.Order)
 	finalStatement := fmt.Sprintf(sqlStatement, orderQuantityCases, orderStatusCases, completedAtCases, orderIDs)
 	log.Println("test2 UpdateOrders")
 
-	_, err := tx.ExecContext(context.Background(), finalStatement, params...)
+	_, err = tx.ExecContext(ctx, finalStatement, params...)
 	if err != nil {
 		return fmt.Errorf("an error occurred while updating orders: %w", err)
 	}
 	return nil
 }
 
-func (o *TransactionRepository) SoftDeleteMatch(tx *sql.Tx, matchID uuid.UUID) error {
+func (o *TransactionRepository) SoftDeleteMatch(ctx context.Context, matchID uuid.UUID) error {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	sqlStatement := `
         UPDATE order_matches
         SET deleted_at = NOW()
         WHERE id = $1;
     `
-	_, err := tx.ExecContext(context.Background(), sqlStatement, matchID)
+	_, err = tx.ExecContext(ctx, sqlStatement, matchID)
 	if err != nil {
 		return fmt.Errorf("an error occurred while soft deleting the match: %w", err)
 	}
 	return nil
 }
 
-func (o *TransactionRepository) FetchMatch(tx *sql.Tx, orderID1 uuid.UUID, orderID2 uuid.UUID) (*entity.OrderMatch, error) {
+func (o *TransactionRepository) FetchMatch(ctx context.Context, orderID1 uuid.UUID, orderID2 uuid.UUID) (*entity.OrderMatch, error) {
+	tx, err := utils.TxFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlStatement := `
         SELECT id, order_id1, order_id2, order_quantity, matched_at 
         FROM order_matches 
@@ -297,7 +348,7 @@ func (o *TransactionRepository) FetchMatch(tx *sql.Tx, orderID1 uuid.UUID, order
     `
 
 	var match entity.OrderMatch
-	err := tx.QueryRowContext(context.Background(), sqlStatement, orderID1, orderID2).Scan(
+	err = tx.QueryRowContext(ctx, sqlStatement, orderID1, orderID2).Scan(
 		&match.ID, &match.OrderID1, &match.OrderID2, &match.OrderQuantity, &match.MatchedAt,
 	)
 

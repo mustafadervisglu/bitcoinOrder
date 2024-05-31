@@ -26,14 +26,12 @@ func NewOrderCheckerService(transactionRepo repository.ITransactionRepository, l
 }
 
 func (s *OrderCheckerService) MatchOrder(tx *sql.Tx, buyOrders, sellOrders []entity.Order) ([]entity.OrderMatch, error) {
-	log.Println("UpdateOrders 1test1")
 	var orderMatches []entity.OrderMatch
 	var ordersToUpdate []*entity.Order
 
 	if len(buyOrders) == 0 || len(sellOrders) == 0 {
 		return nil, nil
 	}
-	log.Println("UpdateOrders 2test2")
 	sort.Slice(buyOrders, func(i, j int) bool {
 		if buyOrders[i].OrderPrice == buyOrders[j].OrderPrice {
 			return buyOrders[i].CreatedAt.Before(buyOrders[j].CreatedAt)
@@ -143,6 +141,7 @@ func (s *OrderCheckerService) UpdateUserBalances(tx *sql.Tx, orderMatches []enti
 
 	return nil
 }
+
 func (s *OrderCheckerService) manageLocksAfterMatch(tx *sql.Tx, buyUser, sellUser *entity.Users, buyOrder entity.Order, matchQuantity float64) error {
 	if err := s.manageLockForAsset(tx, buyUser, "USDT", buyOrder.OrderPrice*matchQuantity); err != nil {
 		return fmt.Errorf("failed to manage USDT lock for buyer: %w", err)
@@ -158,7 +157,7 @@ func (s *OrderCheckerService) manageLockForAsset(tx *sql.Tx, user *entity.Users,
 	if err != nil {
 		return fmt.Errorf("failed to get locked %s amount: %w", asset, err)
 	}
-
+	log.Println("manageLockForAsset locked amount", lockedAmount)
 	if lockedAmount >= amount {
 		if err := s.lockRepo.IncreaseUserBalance(tx, user.ID, asset, amount); err != nil {
 			return fmt.Errorf("failed to increase %s balance: %w", asset, err)
