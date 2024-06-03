@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/google/uuid"
 	"log"
 	"sort"
 	"time"
@@ -25,7 +26,7 @@ func NewOrderCheckerService(transactionRepo repository.ITransactionRepository, l
 	}
 }
 
-func (s *OrderCheckerService) MatchOrder(tx *sql.Tx, buyOrders, sellOrders []entity.Order) ([]entity.OrderMatch, error) {
+func (s *OrderCheckerService) MatchOrder(ctx context.Context, buyOrders, sellOrders []entity.Order) ([]entity.OrderMatch, error) {
 	var orderMatches []entity.OrderMatch
 	var ordersToUpdate []*entity.Order
 
@@ -62,6 +63,7 @@ func (s *OrderCheckerService) MatchOrder(tx *sql.Tx, buyOrders, sellOrders []ent
 			}
 
 			orderMatch := entity.OrderMatch{
+				ID:            uuid.New(),
 				OrderID1:      buyOrder.ID,
 				OrderID2:      sellOrder.ID,
 				OrderQuantity: matchQuantity,
@@ -98,30 +100,28 @@ func (s *OrderCheckerService) MatchOrder(tx *sql.Tx, buyOrders, sellOrders []ent
 			}
 		}
 	}
-	log.Println("UpdateOrders test")
-	if err := s.transactionRepo.UpdateOrders(tx, ordersToUpdate); err != nil {
+	if err := s.transactionRepo.UpdateOrders(ctx, ordersToUpdate); err != nil {
 		return nil, fmt.Errorf("failed to update orders: %w", err)
 	}
 
-	if err := s.transactionRepo.SaveMatches(tx, orderMatches); err != nil {
+	if err := s.transactionRepo.SaveMatches(ctx, orderMatches); err != nil {
 		return nil, fmt.Errorf("failed to save matches: %w", err)
 	}
 
 	return orderMatches, nil
 }
 
-func (s *OrderCheckerService) UpdateUserBalances(tx *sql.Tx, orderMatches []entity.OrderMatch) error {
+func (s *OrderCheckerService) UpdateUserBalances(ctx context.Context, orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
-		buyOrder, err := s.transactionRepo.FindOrderById(tx, match.OrderID1)
+		buyOrder, err := s.transactionRepo.FindOrderById(ctx, match.OrderID1)
 		if err != nil {
 			return fmt.Errorf("failed to find buy order: %w", err)
 		}
 
-		sellOrder, err := s.transactionRepo.FindOrderById(tx, match.OrderID2)
+		sellOrder, err := s.transactionRepo.FindOrderById(ctx, match.OrderID2)
 		if err != nil {
 			return fmt.Errorf("failed to find sell order: %w", err)
 		}
-
 		buyUser := &buyOrder.User
 		sellUser := &sellOrder.User
 
@@ -130,11 +130,11 @@ func (s *OrderCheckerService) UpdateUserBalances(tx *sql.Tx, orderMatches []enti
 		*sellUser.UsdtBalance += sellOrder.OrderPrice * match.OrderQuantity
 		*sellUser.BtcBalance -= match.OrderQuantity
 
-		if err := s.transactionRepo.UpdateBalance(tx, []*entity.Users{buyUser, sellUser}); err != nil {
+		if err := s.transactionRepo.UpdateBalance(ctx, []*entity.Users{buyUser, sellUser}); err != nil {
 			return fmt.Errorf("failed to update user balances: %w", err)
 		}
 
-		if err := s.manageLocksAfterMatch(tx, buyUser, sellUser, buyOrder, match.OrderQuantity); err != nil {
+		if err := s.manageLocksAfterMatch(ctx, buyUser, sellUser, buyOrder, match.OrderQuantity); err != nil {
 			return fmt.Errorf("failed to manage locks: %w", err)
 		}
 	}
@@ -142,32 +142,31 @@ func (s *OrderCheckerService) UpdateUserBalances(tx *sql.Tx, orderMatches []enti
 	return nil
 }
 
-func (s *OrderCheckerService) manageLocksAfterMatch(tx *sql.Tx, buyUser, sellUser *entity.Users, buyOrder entity.Order, matchQuantity float64) error {
-	if err := s.manageLockForAsset(tx, buyUser, "USDT", buyOrder.OrderPrice*matchQuantity); err != nil {
+func (s *OrderCheckerService) manageLocksAfterMatch(ctx context.Context, buyUser, sellUser *entity.Users, buyOrder entity.Order, matchQuantity float64) error {
+	if err := s.manageLockForAsset(ctx, buyUser, "USDT", buyOrder.OrderPrice*matchQuantity); err != nil {
 		return fmt.Errorf("failed to manage USDT lock for buyer: %w", err)
 	}
-	if err := s.manageLockForAsset(tx, sellUser, "BTC", matchQuantity); err != nil {
+	if err := s.manageLockForAsset(ctx, sellUser, "BTC", matchQuantity); err != nil {
 		return fmt.Errorf("failed to manage BTC lock for seller: %w", err)
 	}
 	return nil
 }
 
-func (s *OrderCheckerService) manageLockForAsset(tx *sql.Tx, user *entity.Users, asset string, amount float64) error {
-	lockedAmount, err := s.lockRepo.GetLockedAmount(tx, user.ID, asset)
+func (s *OrderCheckerService) manageLockForAsset(ctx context.Context, user *entity.Users, asset string, amount float64) error {
+	lockedAmount, err := s.lockRepo.GetLockedAmount(ctx, user.ID, asset)
 	if err != nil {
 		return fmt.Errorf("failed to get locked %s amount: %w", asset, err)
 	}
-	log.Println("manageLockForAsset locked amount", lockedAmount)
 	if lockedAmount >= amount {
-		if err := s.lockRepo.IncreaseUserBalance(tx, user.ID, asset, amount); err != nil {
+		if err := s.lockRepo.IncreaseUserBalance(ctx, user.ID, asset, amount); err != nil {
 			return fmt.Errorf("failed to increase %s balance: %w", asset, err)
 		}
 		if lockedAmount == amount {
-			if err := s.lockRepo.DeleteLock(tx, user.ID, asset); err != nil {
+			if err := s.lockRepo.DeleteLock(ctx, user.ID, asset); err != nil {
 				return fmt.Errorf("failed to delete %s lock: %w", asset, err)
 			}
 		} else {
-			if err := s.lockRepo.UpdateLockAmount(tx, user.ID, asset, amount); err != nil {
+			if err := s.lockRepo.UpdateLockAmount(ctx, user.ID, asset, amount); err != nil {
 				return fmt.Errorf("failed to update %s lock amount: %w", asset, err)
 			}
 		}
@@ -178,14 +177,14 @@ func (s *OrderCheckerService) manageLockForAsset(tx *sql.Tx, user *entity.Users,
 	return nil
 }
 
-func (s *OrderCheckerService) SoftDeleteOrderMatch(tx *sql.Tx, orderMatches []entity.OrderMatch) error {
+func (s *OrderCheckerService) SoftDeleteOrderMatch(ctx context.Context, orderMatches []entity.OrderMatch) error {
 	for _, match := range orderMatches {
-		fetchedMatch, err := s.transactionRepo.FetchMatch(tx, match.OrderID1, match.OrderID2)
+		fetchedMatch, err := s.transactionRepo.FetchMatch(ctx, match.OrderID1, match.OrderID2)
 		if err != nil {
 			return fmt.Errorf("failed to fetch order match: %w", err)
 		}
 		if fetchedMatch != nil {
-			if err := s.transactionRepo.SoftDeleteMatch(tx, fetchedMatch.ID); err != nil {
+			if err := s.transactionRepo.SoftDeleteMatch(ctx, fetchedMatch.ID); err != nil {
 				return fmt.Errorf("failed to soft delete order match: %w", err)
 			}
 		}
@@ -194,7 +193,9 @@ func (s *OrderCheckerService) SoftDeleteOrderMatch(tx *sql.Tx, orderMatches []en
 }
 
 func (s *OrderCheckerService) ProcessTransactions() error {
-	dbTx, err := s.db.BeginTx(context.Background(), nil)
+	ctx := context.Background()
+	dbTx, err := s.db.BeginTx(ctx, nil)
+	ctx = context.WithValue(ctx, "tx", dbTx)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -222,27 +223,27 @@ func (s *OrderCheckerService) ProcessTransactions() error {
 		}
 	}()
 
-	buyOrders, err := s.transactionRepo.FindBuyOrders(dbTx)
+	buyOrders, err := s.transactionRepo.FindBuyOrders(ctx)
 	if err != nil {
 		return fmt.Errorf("buy orders could not be retrieved: %w", err)
 	}
 
-	sellOrders, err := s.transactionRepo.FindSellOrders(dbTx)
+	sellOrders, err := s.transactionRepo.FindSellOrders(ctx)
 	if err != nil {
 		return fmt.Errorf("sell orders could not be retrieved: %w", err)
 	}
 
-	orderMatches, err := s.MatchOrder(dbTx, buyOrders, sellOrders)
+	orderMatches, err := s.MatchOrder(ctx, buyOrders, sellOrders)
 	if err != nil {
 		return fmt.Errorf("matching orders failed: %w", err)
 	}
 
-	err = s.UpdateUserBalances(dbTx, orderMatches)
+	err = s.UpdateUserBalances(ctx, orderMatches)
 	if err != nil {
 		return fmt.Errorf("user balances could not be updated: %w", err)
 	}
 
-	err = s.SoftDeleteOrderMatch(dbTx, orderMatches)
+	err = s.SoftDeleteOrderMatch(ctx, orderMatches)
 	if err != nil {
 		return fmt.Errorf("order matches could not be deleted: %w", err)
 	}

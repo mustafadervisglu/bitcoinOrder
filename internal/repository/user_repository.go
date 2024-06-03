@@ -16,10 +16,10 @@ import (
 type IUserRepository interface {
 	CreateUser(user entity.Users) (entity.Users, error)
 	UpdateUser(ctx context.Context, user entity.Users) error
-	GetBalance(id string) (entity.Users, error)
+	GetBalance(id uuid.UUID) (entity.Users, error)
 	FindUser(ctx context.Context, id uuid.UUID) (entity.Users, error)
 	FindUserByEmail(email email.Email) (entity.Users, error)
-	FindAllUser(ctx context.Context) ([]entity.Users, error)
+	FindAllUser() ([]entity.Users, error)
 }
 
 type UserRepository struct {
@@ -45,7 +45,7 @@ func (r *UserRepository) CreateUser(user entity.Users) (entity.Users, error) {
 	return user, nil
 }
 
-func (r *UserRepository) GetBalance(id string) (entity.Users, error) {
+func (r *UserRepository) GetBalance(id uuid.UUID) (entity.Users, error) {
 	return utils.GetBalance(r.gormDB, id)
 }
 
@@ -72,7 +72,7 @@ func (r *UserRepository) FindUser(ctx context.Context, id uuid.UUID) (entity.Use
 		Scan(&user.ID, &user.Email, &user.BtcBalance, &user.UsdtBalance,
 			&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt)
 	if err != nil {
-		return entity.Users{}, fmt.Errorf("kullanıcı bulunamadı: %w", err)
+		return entity.Users{}, fmt.Errorf("user not found: %w", err)
 	}
 	return user, nil
 }
@@ -106,16 +106,9 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user entity.Users) erro
 	return nil
 }
 
-func (r *UserRepository) FindAllUser(ctx context.Context) ([]entity.Users, error) {
-	tx, err := utils.TxFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	sqlStatement := `
-        SELECT * FROM users;
-    `
-	rows, err := tx.QueryContext(ctx, sqlStatement)
+func (r *UserRepository) FindAllUser() ([]entity.Users, error) {
+	sqlStatement := `SELECT * FROM users;`
+	rows, err := r.db.QueryContext(context.Background(), sqlStatement)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching users: %w", err)
 	}
@@ -124,13 +117,11 @@ func (r *UserRepository) FindAllUser(ctx context.Context) ([]entity.Users, error
 	var users []entity.Users
 	for rows.Next() {
 		var user entity.Users
-		err := rows.Scan(&user.ID, &user.Email, &user.BtcBalance, &user.UsdtBalance,
-			&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt)
+		err = rows.Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt, &user.Email, &user.BtcBalance, &user.UsdtBalance)
 		if err != nil {
 			return nil, fmt.Errorf("error while scanning row: %w", err)
 		}
 		users = append(users, user)
 	}
-
 	return users, nil
 }

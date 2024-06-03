@@ -23,6 +23,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/v1/user/:id", h.GetBalance)
 	e.GET("/api/v1/allOrder", h.FindAllOrder)
 	e.GET("api/v1/allUser", h.FindAllUser)
+	e.GET("api/v1/findUser/:id", h.FindUser)
 }
 
 func (h *Handler) CreateOrder(c echo.Context) error {
@@ -59,24 +60,30 @@ func (h *Handler) CreateUser(e echo.Context) error {
 
 func (h *Handler) AddBalance(e echo.Context) error {
 	var balance dto.BalanceDto
-	balance.Id = e.Param("id")
-	balance.Asset = e.Param("asset")
-	userID, err := uuid.Parse(balance.Id)
+	var err error
+	balance.Id, err = uuid.Parse(e.Param("id"))
 	if err != nil {
 		return e.JSON(http.StatusBadRequest, "Invalid user ID")
 	}
-	balance.Id = userID.String()
+	balance.Asset = e.Param("asset")
+
 	if err := e.Bind(&balance); err != nil {
 		return e.JSON(http.StatusBadRequest, err.Error())
 	}
-	if err := h.Service.AddBalance(balance); err != nil {
+
+	ctx := e.Request().Context()
+	if err := h.Service.AddBalance(ctx, balance); err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 	return e.JSON(http.StatusOK, "Balance updated successfully")
 }
 
 func (h *Handler) GetBalance(e echo.Context) error {
-	id := e.Param("id")
+	id, err := uuid.Parse(e.Param("id"))
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid user ID")
+	}
+
 	balance, err := h.Service.GetBalance(id)
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
@@ -85,7 +92,8 @@ func (h *Handler) GetBalance(e echo.Context) error {
 }
 
 func (h *Handler) FindAllOrder(e echo.Context) error {
-	orders, err := h.Service.FindAllOrder()
+	ctx := e.Request().Context()
+	orders, err := h.Service.FindAllOrder(ctx)
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
@@ -98,4 +106,18 @@ func (h *Handler) FindAllUser(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, users)
+}
+
+func (h *Handler) FindUser(e echo.Context) error {
+	ctx := e.Request().Context()
+	id, errID := uuid.Parse(e.Param("id"))
+	if errID != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid user ID")
+	}
+	user, err := h.Service.FindUser(ctx, id)
+
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+	return e.JSON(http.StatusOK, user)
 }

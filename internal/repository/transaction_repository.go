@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"log"
 )
 
 type ITransactionRepository interface {
@@ -173,7 +172,6 @@ func (o *TransactionRepository) UpdateBalance(ctx context.Context, users []*enti
 		}
 		userIDs += fmt.Sprintf("$%d", i*3+1)
 	}
-	log.Println("test user ID", userIDs)
 	finalStatement := fmt.Sprintf(sqlStatement, usdtBalanceCases, btcBalanceCases, userIDs)
 	_, err = tx.ExecContext(ctx, finalStatement, params...)
 	if err != nil {
@@ -190,8 +188,11 @@ func (o *TransactionRepository) FindOrderById(ctx context.Context, orderID uuid.
 	}
 
 	sqlStatement := `
-        SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
-               u.usdt_balance, u.btc_balance
+        SELECT 
+            o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, 
+            o.created_at, o.completed_at,
+            u.id AS user_id, u.email, u.btc_balance, u.usdt_balance, u.created_at AS user_created_at,
+            u.updated_at AS user_updated_at, u.deleted_at AS user_deleted_at
         FROM orders o
         JOIN users u ON o.user_id = u.id
         WHERE o.id = $1 AND o.deleted_at IS NULL;
@@ -199,6 +200,8 @@ func (o *TransactionRepository) FindOrderById(ctx context.Context, orderID uuid.
 
 	var order entity.Order
 	var userIDStr string
+	var userCreatedAt, userUpdatedAt, userDeletedAt sql.NullTime
+
 	err = tx.QueryRowContext(ctx, sqlStatement, orderID).Scan(
 		&order.ID,
 		&userIDStr,
@@ -208,8 +211,8 @@ func (o *TransactionRepository) FindOrderById(ctx context.Context, orderID uuid.
 		&order.OrderStatus,
 		&order.CreatedAt,
 		&order.CompletedAt,
-		&order.User.UsdtBalance,
-		&order.User.BtcBalance,
+		&order.User.ID, &order.User.Email, &order.User.BtcBalance, &order.User.UsdtBalance,
+		&userCreatedAt, &userUpdatedAt, &userDeletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -217,10 +220,24 @@ func (o *TransactionRepository) FindOrderById(ctx context.Context, orderID uuid.
 		}
 		return entity.Order{}, fmt.Errorf("an error occurred while finding the order by ID: %w", err)
 	}
+
+	// UserID'yi UUID'ye dönüştür
 	order.UserID, err = uuid.Parse(userIDStr)
 	if err != nil {
 		return entity.Order{}, fmt.Errorf("wrong user id format: %w", err)
 	}
+
+	// User bilgilerini doldur
+	order.User.CreatedAt = userCreatedAt.Time
+	if userUpdatedAt.Valid {
+		t := userUpdatedAt.Time
+		order.User.UpdatedAt = &t
+	}
+	if userDeletedAt.Valid {
+		t := userDeletedAt.Time
+		order.User.DeletedAt = &t
+	}
+
 	return order, nil
 }
 
@@ -285,30 +302,45 @@ func (o *TransactionRepository) UpdateOrders(ctx context.Context, orders []*enti
         completed_at = CASE id %s END 
     WHERE id IN (%s);
     `
-	log.Println("test UpdateOrders")
+
+	orderUpdates := make(map[uuid.UUID]entity.Order)
+	for _, order := range orders {
+		orderUpdates[order.ID] = *order
+	}
+
 	var params []interface{}
 	var orderQuantityCases, orderStatusCases, completedAtCases, orderIDs string
+	i := 0
 
-	for i, order := range orders {
-		orderQuantityCases += fmt.Sprintf("WHEN '%s' THEN $%d::float ", order.ID, i*3+1)
-		orderStatusCases += fmt.Sprintf("WHEN '%s' THEN $%d::boolean ", order.ID, i*3+2)
+	for id, order := range orderUpdates {
+		orderQuantityCases += fmt.Sprintf("WHEN '%s' THEN $%d ", id, i*3+1)
+		orderStatusCases += fmt.Sprintf("WHEN '%s' THEN $%d ", id, i*3+2)
 		if order.CompletedAt != nil {
-			completedAtCases += fmt.Sprintf("WHEN '%s' THEN to_timestamp($%d / 1000.0) ", order.ID, i*3+3)
+			completedAtCases += fmt.Sprintf("WHEN '%s' THEN to_timestamp($%d / 1000.0) ", id, i*3+3)
 			params = append(params, order.OrderQuantity, order.OrderStatus, order.CompletedAt.UnixNano()/1000.0)
 		} else {
-			completedAtCases += fmt.Sprintf("WHEN '%s' THEN NULL ", order.ID)
+			completedAtCases += fmt.Sprintf("WHEN '%s' THEN NULL ", id)
 			params = append(params, order.OrderQuantity, order.OrderStatus)
 		}
 
 		if i > 0 {
 			orderIDs += ", "
 		}
-		orderIDs += fmt.Sprintf("'%s'", order.ID)
+		orderIDs += fmt.Sprintf("'%s'", id)
+		i++
 	}
-	log.Println("test1 UpdateOrders")
 
 	finalStatement := fmt.Sprintf(sqlStatement, orderQuantityCases, orderStatusCases, completedAtCases, orderIDs)
-	log.Println("test2 UpdateOrders")
+
+	// Tip dönüşümlerini parametrelerde yap
+	for i := range params {
+		switch v := params[i].(type) {
+		case float64:
+			params[i] = fmt.Sprintf("%f::float", v)
+		case bool:
+			params[i] = fmt.Sprintf("%t::boolean", v)
+		}
+	}
 
 	_, err = tx.ExecContext(ctx, finalStatement, params...)
 	if err != nil {

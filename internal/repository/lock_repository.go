@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/google/uuid"
-	"log"
 )
 
 type ILockRepository interface {
@@ -85,7 +84,6 @@ func (r *LockRepository) GetLockedAmount(ctx context.Context, userID uuid.UUID, 
 	}
 
 	var lockedAmount float64
-	log.Println("GetLockedAmount", lockedAmount, asset)
 	err = tx.QueryRowContext(ctx,
 		"SELECT COALESCE(SUM(amount), 0) FROM locks WHERE user_id = $1 AND asset = $2", userID, asset).Scan(&lockedAmount)
 	if err != nil {

@@ -3,12 +3,12 @@ package dto
 import "github.com/google/uuid"
 
 type OrderDto struct {
-	Asset         string  `json:"Asset"`
-	OrderPrice    float64 `json:"OrderPrice"`
-	OrderQuantity float64 `json:"OrderQuantity"`
-	OrderStatus   bool    `json:"OrderStatus"`
-	UserID        string  `json:"UserID"`
-	Type          string  `json:"Type"`
+	Asset         string    `json:"Asset"`
+	OrderPrice    float64   `json:"OrderPrice"`
+	OrderQuantity float64   `json:"OrderQuantity"`
+	OrderStatus   bool      `json:"OrderStatus"`
+	UserID        uuid.UUID `json:"UserID"`
+	Type          string    `json:"Type"`
 }
 type UserDto struct {
 	Email       string  `json:"Email"`
@@ -22,7 +22,7 @@ type OrderMatchDto struct {
 }
 
 type BalanceDto struct {
-	Id     string  `param:"Id"`
-	Asset  string  `param:"Asset"`
-	Amount float64 `json:"Amount"`
+	Id     uuid.UUID `param:"Id"`
+	Asset  string    `param:"Asset"`
+	Amount float64   `json:"Amount"`
 }
