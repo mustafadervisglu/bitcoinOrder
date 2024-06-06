@@ -29,7 +29,7 @@ func main() {
 		sqlDB.Close()
 	}()
 
-	transactionRepo := repository.NewTransactionRepository(sqlDB)
+	transactionRepo := repository.NewTransactionRepository(gormDB, sqlDB)
 	lockRepo := repository.NewLockRepository(sqlDB)
 	transactionService := service.NewOrderCheckerService(transactionRepo, lockRepo, sqlDB)
 

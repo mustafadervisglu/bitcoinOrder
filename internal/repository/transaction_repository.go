@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type ITransactionRepository interface {
@@ -24,13 +25,14 @@ type ITransactionRepository interface {
 }
 
 type TransactionRepository struct {
-	db *sql.DB
+	db   *sql.DB
+	gorm *gorm.DB
 }
 
-func NewTransactionRepository(db *sql.DB) ITransactionRepository {
+func NewTransactionRepository(gorm *gorm.DB, db *sql.DB) ITransactionRepository {
 	return &TransactionRepository{
-
-		db: db,
+		gorm: gorm,
+		db:   db,
 	}
 }
 
@@ -41,12 +43,14 @@ func (o *TransactionRepository) FindBuyOrders(ctx context.Context) ([]entity.Ord
 	}
 
 	sqlStatement := `
-        SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
-               u.usdt_balance, u.btc_balance
-        FROM orders o
-        JOIN users u ON o.user_id = u.id
-        WHERE o.order_status = true AND o.type = 'buy' AND o.deleted_at IS NULL
-        ORDER BY o.order_price ASC, o.created_at ASC;
+        SELECT 
+        o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
+        u.id AS user_id, u.email, u.btc_balance, u.usdt_balance, u.created_at AS user_created_at,
+        u.updated_at AS user_updated_at, u.deleted_at AS user_deleted_at
+    FROM orders o
+    JOIN users u ON o.user_id = u.id
+    WHERE o.order_status = true AND o.type = 'buy' AND o.deleted_at IS NULL
+    ORDER BY o.order_price ASC, o.created_at ASC;
     `
 
 	return o.scanOrders(tx, sqlStatement)
@@ -59,12 +63,14 @@ func (o *TransactionRepository) FindSellOrders(ctx context.Context) ([]entity.Or
 	}
 
 	sqlStatement := `
-        SELECT o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
-               u.usdt_balance, u.btc_balance
-        FROM orders o
-        JOIN users u ON o.user_id = u.id
-        WHERE o.order_status = true AND o.type = 'sell' AND o.deleted_at IS NULL
-        ORDER BY o.order_price DESC, o.created_at ASC;
+ SELECT 
+        o.id, o.user_id, o.type, o.order_quantity, o.order_price, o.order_status, o.created_at, o.completed_at,
+        u.id AS user_id, u.email, u.btc_balance, u.usdt_balance, u.created_at AS user_created_at,
+        u.updated_at AS user_updated_at, u.deleted_at AS user_deleted_at
+    FROM orders o
+    JOIN users u ON o.user_id = u.id
+    WHERE o.order_status = true AND o.type = 'sell' AND o.deleted_at IS NULL
+    ORDER BY o.order_price DESC, o.created_at ASC;
     `
 
 	return o.scanOrders(tx, sqlStatement)
@@ -76,22 +82,17 @@ func (o *TransactionRepository) scanOrders(tx *sql.Tx, sqlStatement string) ([]e
 		return nil, fmt.Errorf("an error occurred while retrieving orders: %w", err)
 	}
 	defer rows.Close()
-
 	var orders []entity.Order
 	for rows.Next() {
 		var order entity.Order
 		var userIDStr string
-		err := rows.Scan(
-			&order.ID,
-			&userIDStr,
-			&order.Type,
-			&order.OrderQuantity,
-			&order.OrderPrice,
-			&order.OrderStatus,
-			&order.CreatedAt,
-			&order.CompletedAt,
-			&order.User.UsdtBalance,
-			&order.User.BtcBalance,
+		var userCreatedAt, userUpdatedAt, userDeletedAt sql.NullTime
+
+		err = rows.Scan(
+			&order.ID, &userIDStr, &order.Type, &order.OrderQuantity,
+			&order.OrderPrice, &order.OrderStatus, &order.CreatedAt, &order.CompletedAt,
+			&order.User.ID, &order.User.Email, &order.User.BtcBalance, &order.User.UsdtBalance,
+			&userCreatedAt, &userUpdatedAt, &userDeletedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error while scanning row: %w", err)
@@ -99,6 +100,15 @@ func (o *TransactionRepository) scanOrders(tx *sql.Tx, sqlStatement string) ([]e
 		order.UserID, err = uuid.Parse(userIDStr)
 		if err != nil {
 			return nil, fmt.Errorf("wrong user id format: %w", err)
+		}
+		order.User.CreatedAt = userCreatedAt.Time
+		if userUpdatedAt.Valid {
+			t := userUpdatedAt.Time
+			order.User.UpdatedAt = &t
+		}
+		if userDeletedAt.Valid {
+			t := userDeletedAt.Time
+			order.User.DeletedAt = &t
 		}
 
 		orders = append(orders, order)
@@ -288,64 +298,28 @@ func (o *TransactionRepository) SoftDeleteOrder(ctx context.Context, orderID uui
 
 	return nil
 }
-
 func (o *TransactionRepository) UpdateOrders(ctx context.Context, orders []*entity.Order) error {
-	tx, err := utils.TxFromContext(ctx)
-	if err != nil {
-		return err
-	}
+	// tx, err := utils.TxFromContext(ctx)
+	// if err != nil {
+	//  return err
+	// }
 
-	sqlStatement := `
-    UPDATE orders 
-    SET order_quantity = CASE id %s END, 
-        order_status = CASE id %s END, 
-        completed_at = CASE id %s END 
-    WHERE id IN (%s);
-    `
-
-	orderUpdates := make(map[uuid.UUID]entity.Order)
 	for _, order := range orders {
-		orderUpdates[order.ID] = *order
-	}
+		result := o.gorm.WithContext(ctx).Model(&entity.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{
+			"order_quantity": order.OrderQuantity,
+			"order_status":   order.OrderStatus,
+			"completed_at":   order.CompletedAt,
+		})
 
-	var params []interface{}
-	var orderQuantityCases, orderStatusCases, completedAtCases, orderIDs string
-	i := 0
-
-	for id, order := range orderUpdates {
-		orderQuantityCases += fmt.Sprintf("WHEN '%s' THEN $%d ", id, i*3+1)
-		orderStatusCases += fmt.Sprintf("WHEN '%s' THEN $%d ", id, i*3+2)
-		if order.CompletedAt != nil {
-			completedAtCases += fmt.Sprintf("WHEN '%s' THEN to_timestamp($%d / 1000.0) ", id, i*3+3)
-			params = append(params, order.OrderQuantity, order.OrderStatus, order.CompletedAt.UnixNano()/1000.0)
-		} else {
-			completedAtCases += fmt.Sprintf("WHEN '%s' THEN NULL ", id)
-			params = append(params, order.OrderQuantity, order.OrderStatus)
+		if result.Error != nil {
+			return fmt.Errorf("failed to update order with ID %s: %w", order.ID, result.Error)
 		}
 
-		if i > 0 {
-			orderIDs += ", "
-		}
-		orderIDs += fmt.Sprintf("'%s'", id)
-		i++
-	}
-
-	finalStatement := fmt.Sprintf(sqlStatement, orderQuantityCases, orderStatusCases, completedAtCases, orderIDs)
-
-	// Tip dönüşümlerini parametrelerde yap
-	for i := range params {
-		switch v := params[i].(type) {
-		case float64:
-			params[i] = fmt.Sprintf("%f::float", v)
-		case bool:
-			params[i] = fmt.Sprintf("%t::boolean", v)
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("no orders updated with ID %s", order.ID)
 		}
 	}
 
-	_, err = tx.ExecContext(ctx, finalStatement, params...)
-	if err != nil {
-		return fmt.Errorf("an error occurred while updating orders: %w", err)
-	}
 	return nil
 }
 

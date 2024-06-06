@@ -103,7 +103,6 @@ func (s *OrderCheckerService) MatchOrder(ctx context.Context, buyOrders, sellOrd
 	if err := s.transactionRepo.UpdateOrders(ctx, ordersToUpdate); err != nil {
 		return nil, fmt.Errorf("failed to update orders: %w", err)
 	}
-
 	if err := s.transactionRepo.SaveMatches(ctx, orderMatches); err != nil {
 		return nil, fmt.Errorf("failed to save matches: %w", err)
 	}
@@ -158,20 +157,20 @@ func (s *OrderCheckerService) manageLockForAsset(ctx context.Context, user *enti
 		return fmt.Errorf("failed to get locked %s amount: %w", asset, err)
 	}
 	if lockedAmount >= amount {
-		if err := s.lockRepo.IncreaseUserBalance(ctx, user.ID, asset, amount); err != nil {
+		if err = s.lockRepo.IncreaseUserBalance(ctx, user.ID, asset, amount); err != nil {
 			return fmt.Errorf("failed to increase %s balance: %w", asset, err)
 		}
 		if lockedAmount == amount {
-			if err := s.lockRepo.DeleteLock(ctx, user.ID, asset); err != nil {
+			if err = s.lockRepo.DeleteLock(ctx, user.ID, asset); err != nil {
 				return fmt.Errorf("failed to delete %s lock: %w", asset, err)
 			}
 		} else {
-			if err := s.lockRepo.UpdateLockAmount(ctx, user.ID, asset, amount); err != nil {
+			if err = s.lockRepo.UpdateLockAmount(ctx, user.ID, asset, amount); err != nil {
 				return fmt.Errorf("failed to update %s lock amount: %w", asset, err)
 			}
 		}
 	} else {
-		return fmt.Errorf("insufficient locked %s balance: %v", asset, user.ID)
+		return fmt.Errorf("insufficient locked %s usdt_balance: %v, btc_balance: %v, lock_amount:%v", asset, user.UsdtBalance, user.BtcBalance, amount)
 	}
 
 	return nil
@@ -232,7 +231,6 @@ func (s *OrderCheckerService) ProcessTransactions() error {
 	if err != nil {
 		return fmt.Errorf("sell orders could not be retrieved: %w", err)
 	}
-
 	orderMatches, err := s.MatchOrder(ctx, buyOrders, sellOrders)
 	if err != nil {
 		return fmt.Errorf("matching orders failed: %w", err)
