@@ -37,24 +37,28 @@ func NewUserRepository(gorm *gorm.DB, db *sql.DB) IUserRepository {
 var ErrUserExists = errors.New("user already exists")
 
 func (r *UserRepository) CreateUser(user entity.Users) (entity.Users, error) {
-	sqlStatement := `INSERT INTO users (id,email,btc_balance,usdt_balance,created_at)
-					 VALUES ($1,$2,$3,$4,$5)
-					 RETURNING id, created_at;	
-`
+	sqlStatement := `
+        INSERT INTO users (id, email, btc_balance, usdt_balance, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, created_at;	
+    `
+
 	var btcBalance, usdtBalance sql.NullFloat64
-	if user.BtcBalance == nil {
+	if user.BtcBalance != nil {
 		btcBalance.Float64 = *user.BtcBalance
 		btcBalance.Valid = true
 	}
-	if user.UsdtBalance == nil {
+	if user.UsdtBalance != nil {
 		usdtBalance.Float64 = *user.UsdtBalance
 		usdtBalance.Valid = true
 	}
+
 	err := r.db.QueryRowContext(context.Background(), sqlStatement, user.ID, user.Email,
-		user.BtcBalance, user.UsdtBalance, time.Now()).Scan(&user.ID, &user.CreatedAt)
+		btcBalance, usdtBalance, time.Now()).Scan(&user.ID, &user.CreatedAt)
 	if err != nil {
 		return entity.Users{}, err
 	}
+
 	return user, nil
 }
 

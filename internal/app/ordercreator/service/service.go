@@ -252,6 +252,7 @@ func (s *OrderCreatorService) CreateUser(newUser dto.UserDto) (entity.Users, err
 	usdtBalance := newUser.UsdtBalance
 
 	userEntity := entity.Users{
+		ID:          uuid.New(),
 		Email:       newUser.Email,
 		BtcBalance:  &btcBalance,
 		UsdtBalance: &usdtBalance,
