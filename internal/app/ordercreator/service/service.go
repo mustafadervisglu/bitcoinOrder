@@ -21,7 +21,11 @@ type OrderCreatorService struct {
 	db        *sql.DB
 }
 
-func NewOrderCreatorService(orderRepo repository.IOrderRepository, userRepo repository.IUserRepository, lockRepo repository.ILockRepository, gormDB *gorm.DB, db *sql.DB) *OrderCreatorService {
+func NewOrderCreatorService(
+	orderRepo repository.IOrderRepository,
+	userRepo repository.IUserRepository,
+	lockRepo repository.ILockRepository,
+	gormDB *gorm.DB, db *sql.DB) *OrderCreatorService {
 	return &OrderCreatorService{
 		orderRepo: orderRepo,
 		userRepo:  userRepo,
